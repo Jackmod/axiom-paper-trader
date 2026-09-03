@@ -35,6 +35,9 @@ function App() {
   // Balance and the SOL/USD rate, so the widget can show what the account is worth and
   // denominate PnL in SOL without doing any of that maths itself.
   const [account, setAccount] = useState({ balanceSol: 0, solUsdPrice: 0 })
+  // Set when the user pastes an address because detection missed. Cleared on navigation,
+  // so it can never silently follow them onto a different token.
+  const [mintOverride, setMintOverride] = useState(null)
 
   useEffect(() => {
     chrome.storage.local.get(['balanceSol', 'solUsdPrice'], ({ balanceSol, solUsdPrice }) => {
@@ -52,7 +55,7 @@ function App() {
     return () => chrome.storage.onChanged.removeListener(onAccountChanged)
   }, [])
 
-  const mint = pageContext?.mint ?? null
+  const mint = mintOverride ?? pageContext?.mint ?? null
 
   // The click listener is attached once and must always see the *current* position,
   // because a sell is a percentage of what is held. Reading it through a ref keeps it
@@ -120,6 +123,7 @@ function App() {
       // the PREVIOUS token's position would invite a trade against the wrong coin.
       setPageContext(scrapeTradeContext())
       setPosition(null)
+      setMintOverride(null)
     })
   }, [])
 
@@ -148,15 +152,25 @@ function App() {
 
   // The widget's own preset buttons trade through exactly the same path as a hijacked
   // click on Axiom's button: same scrape, same quoted fill price, same BUY/SELL message.
+  //
+  // The scrape is best-effort, not a gate. It supplies display extras (price, MC), but
+  // the mint is whatever the widget is actually showing — including one the user pasted
+  // because detection missed. Requiring a successful scrape here would have reinstated
+  // exactly the dead-button problem the manual entry exists to solve.
+  function tradeContext() {
+    if (!mint) return null
+    return { ...(scrapeTradeContext() ?? {}), mint }
+  }
+
   async function handleBuyPreset(amountSol) {
-    const context = scrapeTradeContext()
+    const context = tradeContext()
     if (!context) return
     const priceUsd = await resolveFillPrice(context, amountSol)
     sendTrade({ side: 'buy', ...context, solSpent: amountSol, priceUsd })
   }
 
   function handleSellPreset(pct) {
-    const context = scrapeTradeContext()
+    const context = tradeContext()
     if (!context) return
     sendTrade({ side: 'sell', ...context, sellPercent: pct, priceUsd: context.priceUsd })
   }
@@ -168,6 +182,7 @@ function App() {
     <Widget
       position={position}
       mint={mint}
+      onMintOverride={setMintOverride}
       priceUsd={pageContext?.priceUsd}
       balanceSol={account.balanceSol}
       solUsdPrice={account.solUsdPrice}

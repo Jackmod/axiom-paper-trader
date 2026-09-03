@@ -166,3 +166,12 @@
   background: var(--color-sell);
   color: var(--color-bg);
 }
+
+/* Manual token entry, shown only when detection found nothing — the escape hatch that
+   guarantees there is always a way to trade. */
+.axpt-mint-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 11px;
+}

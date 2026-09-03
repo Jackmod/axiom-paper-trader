@@ -431,3 +431,58 @@ describe('Widget tooltips', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('2 SOL @ $0.00005000')
   })
 })
+
+// Detection failing must never mean "no way to trade". Before this existed, an
+// undetected mint disabled every buy button, and with no position every sell button too
+// — the whole product dead, with a panel of greyed-out controls and no explanation.
+describe('Widget — manual token entry when detection misses', () => {
+  const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
+
+  it('offers a contract-address field when no token was detected', () => {
+    render(<Widget position={null} mint={null} onBuyPreset={vi.fn()} onSellPreset={vi.fn()} />)
+
+    expect(screen.getByLabelText(/token contract address/i)).toBeInTheDocument()
+    expect(screen.getByText(/couldn’t detect the token/i)).toBeInTheDocument()
+  })
+
+  it('hands the pasted address back to the caller', () => {
+    const onMintOverride = vi.fn()
+    render(
+      <Widget position={null} mint={null} onMintOverride={onMintOverride} onBuyPreset={vi.fn()} onSellPreset={vi.fn()} />,
+    )
+
+    fireEvent.input(screen.getByLabelText(/token contract address/i), { target: { value: `  ${MINT}  ` } })
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }))
+
+    // Trimmed: a pasted address routinely carries surrounding whitespace.
+    expect(onMintOverride).toHaveBeenCalledWith(MINT)
+  })
+
+  it('ignores an empty submission rather than overriding with nothing', () => {
+    const onMintOverride = vi.fn()
+    render(
+      <Widget position={null} mint={null} onMintOverride={onMintOverride} onBuyPreset={vi.fn()} onSellPreset={vi.fn()} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^use$/i }))
+
+    expect(onMintOverride).not.toHaveBeenCalled()
+  })
+
+  it('hides the field once a token is known, detected or pasted', () => {
+    render(<Widget position={null} mint={MINT} onBuyPreset={vi.fn()} onSellPreset={vi.fn()} />)
+
+    expect(screen.queryByLabelText(/token contract address/i)).not.toBeInTheDocument()
+  })
+
+  it('enables buying as soon as a token is known', () => {
+    const onBuyPreset = vi.fn()
+    render(<Widget position={null} mint={MINT} onBuyPreset={onBuyPreset} onSellPreset={vi.fn()} />)
+
+    const buy = screen.getByRole('button', { name: 'Buy 0.25 SOL' })
+    expect(buy).not.toBeDisabled()
+    buy.click()
+
+    expect(onBuyPreset).toHaveBeenCalledWith(0.25)
+  })
+})

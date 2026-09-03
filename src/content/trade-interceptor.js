@@ -8,20 +8,33 @@ import {
   amountOf,
 } from './dom-scraper.js'
 import { fetchQuotedFillPrice } from '../lib/price-sources/jupiter-quote.js'
-import { SOL_MINT } from '../lib/price-sources/jupiter.js'
+import { SOL_MINT, fetchJupiterTokenInfo } from '../lib/price-sources/jupiter.js'
 
 const LAMPORTS_PER_SOL = 1_000_000_000
 
 // Exported so the widget's own preset buttons (inject.jsx) fill at the same quoted
 // execution price as a hijacked click on Axiom's button — one price path, not two.
 export async function resolveFillPrice(context, qtySol) {
+  const info = await fetchJupiterTokenInfo(context.mint)
+
+  // No decimals means no trustworthy token count, and therefore no trustworthy fill
+  // price. Fall back to the price the page is showing rather than quoting against a
+  // guessed scale — an honest approximate price beats a confidently wrong one.
+  if (!Number.isInteger(info?.decimals)) return info?.priceUsd ?? context.priceUsd
+
+  const decimals = info.decimals
   const quoted = await fetchQuotedFillPrice({
     inputMint: SOL_MINT,
     outputMint: context.mint,
     amountLamports: Math.round(qtySol * LAMPORTS_PER_SOL),
-    outputDecimals: 6, // most SPL memecoins use 6 decimals; verify per-token if this proves wrong in manual testing
+    // The token's REAL decimals, read from Jupiter alongside its price. This was
+    // hardcoded to 6 on the assumption that "most SPL memecoins use 6" — but a 9-decimal
+    // token would then have its fill price computed 1000x wrong and written into cost
+    // basis, where it is indistinguishable from a real entry forever after. A wrong
+    // decimals is not a rounding error, it is a corrupt position.
+    outputDecimals: decimals,
   })
-  return quoted ?? context.priceUsd // fall back to the DOM-displayed price if the quote hasn't returned/failed
+  return quoted ?? info.priceUsd ?? context.priceUsd // quote > spot > whatever the page showed
 }
 
 function readSolAmount() {

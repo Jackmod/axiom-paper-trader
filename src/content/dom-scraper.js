@@ -1,5 +1,6 @@
 import { parseNumber } from './parse-number.js'
 import * as discovery from './discovery.js'
+import { detectMint, findMintCandidates } from './mint-detector.js'
 
 // How the extension locates Axiom's controls: by LABEL, at runtime (see discovery.js).
 //
@@ -24,16 +25,13 @@ export const { percentOf, amountOf } = discovery
 // Solana mint addresses are base58, 32-44 chars. Axiom's token routes carry the mint
 // directly (e.g. /meme/<mint>), which is far more durable than any DOM attribute — a
 // redesign rewrites markup, but the route has to keep identifying the token.
-const MINT_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-
-export function readMint() {
-  const fromUrl = window.location.pathname.split('/').find((segment) => MINT_PATTERN.test(segment))
-  if (fromUrl) return fromUrl
-
-  // Fallback for routes that don't carry it: any element advertising a mint.
-  const el = document.querySelector('[data-token-mint]')
-  return el?.getAttribute('data-token-mint') ?? null
-}
+// Detection lives in mint-detector.js, which looks in every place a mint plausibly
+// appears — the route, explorer links, copy-CA buttons, data attributes, page text — and
+// ranks them. It used to be the URL alone, and when that guess missed, `mint` was null,
+// every buy button was disabled, and with no position every sell was disabled too: one
+// wrong assumption silently disabled the whole product.
+export const readMint = () => detectMint(document, window.location.href)
+export const mintCandidates = () => findMintCandidates(document, window.location.href)
 
 // Display-only details (spec §6). Every one of these is best-effort: if a heuristic
 // misses, the field is empty and the trade still records correctly. Token name, symbol

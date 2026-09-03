@@ -15,6 +15,7 @@ const SELL_PRESETS_PCT = [25, 50, 100]
 export function Widget({
   position,
   mint,
+  onMintOverride,
   tokenName = '',
   tokenSymbol = '',
   tokenImageUrl = '',
@@ -72,6 +73,36 @@ export function Widget({
 
       {!collapsed && (
         <>
+          {/* Detection missing the token must never mean "no way to trade". Every other
+              path here depends on `mint`, so when it is absent the user gets a way to
+              supply it by hand rather than a panel of dead buttons and no explanation. */}
+          {!mint && (
+            <form
+              class="axpt-mint-entry"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const value = e.currentTarget.elements.mint.value.trim()
+                if (value) onMintOverride?.(value)
+              }}
+            >
+              <label class="axpt-muted" for="axpt-mint-input">
+                Couldn’t detect the token — paste its contract address
+              </label>
+              <div class="axpt-custom-row">
+                <input
+                  id="axpt-mint-input"
+                  name="mint"
+                  class="axpt-custom-input mono"
+                  placeholder="Contract address"
+                  aria-label="Token contract address"
+                />
+                <button class="axpt-preset-btn axpt-buy-btn" type="submit">
+                  Use
+                </button>
+              </div>
+            </form>
+          )}
+
           {position && (
             <div class="axpt-widget-position mono">
               <span class="axpt-muted">Holding</span>

@@ -203,6 +203,17 @@ rows in the live position view (§6).
   service worker) because MV3 service workers are non-persistent and cannot
   reliably hold a long-lived socket open — see §16. When the Side Panel is
   closed, everything falls back to the 1-minute REST-polled alarm cadence.
+- **REVISED 2026-09-03 — the pump.fun REST tier is removed; price resolution is two
+  tiers, Jupiter then DexScreener.** Verified against the live services: pump.fun v3
+  carries no price field at all (so the tier had been returning null on every call), v2
+  is now 503 and outside the manifest host permissions (so calls to it were CORS-blocked
+  before reaching the network), and the tier was redundant regardless — Jupiter priced a
+  pump.fun mint eight seconds after its creation while DexScreener had a pair but no
+  price. Deriving price from the bonding curve was rejected deliberately: reserves are
+  denominated in whichever mint the curve quotes (a live coin quoted in USDC, not SOL)
+  and scaled by two decimals fields, so a subtly wrong derivation writes a
+  plausible-but-wrong entry price into cost basis permanently. pump.fun remains an
+  identity source (name/symbol/image) at v3.
 - **REVISED 2026-09-03 — the `pumpportal.fun` websocket tier is opt-in and
   inert by default.** The original design assumed a keyless subscription.
   Verifying the live service during implementation showed otherwise: it

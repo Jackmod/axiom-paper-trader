@@ -8,7 +8,10 @@ vi.mock('../lib/price-sources/jupiter-quote.js', () => ({
   fetchQuotedFillPrice: vi.fn(async () => 0.000005),
 }))
 
-const MINT = 'So11111111111111111111111111111111111111112'
+// A realistic memecoin mint. It deliberately is NOT wrapped SOL or USDC: those are on
+// the detector denylist precisely because they litter a trading page and are never the
+// token being traded.
+const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
 
 // Controls are discovered by LABEL at runtime, so these fixtures carry labels and the
 // kind of generated class names a real build emits — no data-* hooks, because

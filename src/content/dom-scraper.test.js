@@ -1,7 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { findBuyButton, findSellButtons, scrapeTradeContext, readMint, canIntercept } from './dom-scraper.js'
 
-const MINT = 'So11111111111111111111111111111111111111112'
+// A realistic memecoin mint. It deliberately is NOT wrapped SOL or USDC: those are on
+// the detector denylist precisely because they litter a trading page and are never the
+// token being traded.
+const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
 
 // Realistic markup: labels a user reads, and generated class names of the kind a real
 // build emits. Nothing here relies on data-* attributes, because axiom.trade does not

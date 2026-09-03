@@ -1,3 +1,4 @@
+import { PUMPFUN_API } from './price-sources/pumpfun.js'
 // Token identity — name, symbol, image — resolved from the price APIs rather than
 // scraped off Axiom's page.
 //
@@ -47,7 +48,11 @@ export async function fetchDexScreenerToken(mint) {
 
 export async function fetchPumpFunToken(mint) {
   try {
-    const res = await fetch(`https://frontend-api-v2.pump.fun/coins/${mint}`)
+    // v3, not v2. v2 is now 503, and the manifest only grants a host permission for v3 —
+    // so calls to v2 were CORS-blocked before they ever reached the network, surfacing as
+    // "No 'Access-Control-Allow-Origin' header" in the extension's error log.
+    // A 404 here is normal and expected: it just means this mint is not a pump.fun coin.
+    const res = await fetch(`${PUMPFUN_API}/coins/${mint}`)
     if (!res.ok) return null
     const body = await res.json()
     const name = cleanText(body.name)
