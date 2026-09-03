@@ -39,3 +39,14 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* PnL sign colouring is shared by every surface that shows a PnL number — the
+   on-page widget, the popup, and the Side Panel — so it lives with the tokens
+   rather than in any one surface's stylesheet. Green/pink are the only
+   saturated accents (spec §15). */
+.axpt-pnl-positive {
+  color: var(--color-buy);
+}
+.axpt-pnl-negative {
+  color: var(--color-sell);
+}

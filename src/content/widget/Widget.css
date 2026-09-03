@@ -32,12 +32,8 @@
   font-size: 11px;
   padding: 0 var(--space-2);
 }
-.axpt-pnl-positive {
-  color: var(--color-buy);
-}
-.axpt-pnl-negative {
-  color: var(--color-sell);
-}
+/* .axpt-pnl-positive / .axpt-pnl-negative now live in ../../ui/tokens.css,
+   which inject.jsx loads into this same content script. */
 
 .axpt-buy-row,
 .axpt-sell-row {
