@@ -135,3 +135,46 @@ describe('findMintCandidates — ranking', () => {
     expect(detectMint(document, 'not a url')).toBe(MINT)
   })
 })
+
+// Reported from a live session: standing on the Pulse discovery feed — no token open —
+// the widget latched onto "Crap coin" from the listing and offered to trade it. Picking
+// an arbitrary coin out of a list is worse than detecting nothing, because the user is
+// one click away from a position in a token they never opened.
+describe('detectMint — a listing page is not a token page', () => {
+  const feedOf = (mints) => mints.map((m) => `<div class="row"><span>${m}</span></div>`).join('')
+
+  it('detects nothing on a feed that lists many tokens', () => {
+    document.body.innerHTML = feedOf([
+      MINT,
+      OTHER,
+      'A1B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2pump',
+      'B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3pump',
+      'C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3X4pump',
+    ])
+    expect(detectMint(document, 'https://axiom.trade/pulse')).toBeNull()
+  })
+
+  it('still detects the token when the route names one, however busy the page', () => {
+    // The route is authoritative — a feed rendered behind an open token must not
+    // out-vote the address the user actually navigated to.
+    document.body.innerHTML = feedOf([
+      OTHER,
+      'A1B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2pump',
+      'B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3pump',
+      'C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3X4pump',
+    ])
+    expect(detectMint(document, `https://axiom.trade/meme/${MINT}`)).toBe(MINT)
+  })
+
+  it('still detects from the page when only a couple of addresses are present', () => {
+    // A real token page names the token a few times — in a copy button, an explorer
+    // link, the body text — so a small number of mentions is a token page, not a list.
+    document.body.innerHTML = `<a href="https://solscan.io/token/${MINT}">x</a><span>${MINT}</span>`
+    expect(detectMint(document, 'https://axiom.trade/discover')).toBe(MINT)
+  })
+
+  it('reports the candidates either way, so a caller can still inspect them', () => {
+    document.body.innerHTML = feedOf([MINT, OTHER, 'A1B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2pump'])
+    expect(findMintCandidates(document, 'https://axiom.trade/pulse').length).toBeGreaterThan(0)
+  })
+})

@@ -115,7 +115,28 @@ export function findMintCandidates(doc = document, url = window.location.href) {
     .sort((a, b) => b.weight - a.weight)
 }
 
-/** The single best guess, or null when the page offers nothing plausible. */
+// How many distinct mints a page may mention before its DOM stops being evidence about
+// which token the user is looking at. A token page names a handful of addresses; a feed
+// names one per row.
+const AMBIGUITY_LIMIT = 3
+
+/**
+ * The token the user is actually looking at, or null.
+ *
+ * The URL is authoritative: a route carrying a mint says unambiguously which token is in
+ * focus. Page content is only evidence when a SINGLE token is in focus — on a discovery
+ * feed the DOM mentions dozens, and picking the highest-scoring one meant the widget
+ * latched onto an arbitrary coin from the list and offered to trade it. That is worse
+ * than detecting nothing: the user is one click from a position in a token they never
+ * opened. So when the route names no token and the page names several, this reports
+ * nothing and the widget falls back to asking for an address.
+ */
 export function detectMint(doc = document, url = window.location.href) {
-  return findMintCandidates(doc, url)[0]?.mint ?? null
+  const candidates = findMintCandidates(doc, url)
+  if (candidates.length === 0) return null
+
+  const fromUrl = candidates.find((candidate) => candidate.sources.some((source) => source.startsWith('url-')))
+  if (fromUrl) return fromUrl.mint
+
+  return candidates.length <= AMBIGUITY_LIMIT ? candidates[0].mint : null
 }

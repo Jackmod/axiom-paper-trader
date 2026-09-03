@@ -19,6 +19,8 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DIST = join(HERE, '..', 'dist')
 const SHOTS = join(HERE, 'screenshots')
 const FIXTURE = readFileSync(join(HERE, 'fixtures', 'axiom-token-page.html'), 'utf8')
+const FEED_FIXTURE = readFileSync(join(HERE, 'fixtures', 'axiom-feed-page.html'), 'utf8')
+const FEED_URL = 'https://axiom.trade/pulse'
 const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
 const SOL_MINT = 'So11111111111111111111111111111111111111112'
 const TOKEN_URL = `https://axiom.trade/meme/${MINT}`
@@ -35,7 +37,11 @@ async function launch() {
   const page = await context.newPage()
   // Serve the fixture at axiom.trade so the content script's URL match applies.
   await context.route('https://axiom.trade/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/html', body: FIXTURE }),
+    route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: route.request().url().includes('/pulse') ? FEED_FIXTURE : FIXTURE,
+    }),
   )
   // Everything else the page or extension reaches for is stubbed: a screenshot test must
   // not depend on live market data.
@@ -171,6 +177,22 @@ test('the side panel page renders the portfolio', async () => {
   await panel.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`)
   await expect(panel.locator('body')).toContainText(/Balance|starting balance/i, { timeout: 15000 })
   await panel.screenshot({ path: join(SHOTS, '04-side-panel.png') })
+
+  await context.close()
+})
+
+test('on a discovery feed it does NOT latch onto a coin from the list', async () => {
+  const { context, page } = await launch()
+  await page.goto(FEED_URL)
+  await expect(widget(page)).toBeVisible({ timeout: 15000 })
+
+  // Reported live: standing on Pulse with nothing open, the widget picked a coin out of
+  // the listing and offered to trade it. That is one click from a position in a token the
+  // user never opened — worse than detecting nothing at all.
+  await expect(widget(page)).toContainText(/No token open/i)
+  await expect(widget(page)).not.toContainText(/Crap coin/i)
+  await expect(page.getByRole('button', { name: 'Buy 0.25 SOL' })).toBeDisabled()
+  await page.screenshot({ path: join(SHOTS, '05-feed-no-token.png') })
 
   await context.close()
 })
