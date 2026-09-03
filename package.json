@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "lint": "eslint src",
     "format": "prettier --write .",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "test:e2e": "npm run build && playwright test"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.7.1",
+    "@playwright/test": "^1.62.1",
     "@preact/preset-vite": "^2.10.6",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/preact": "^3.2.4",

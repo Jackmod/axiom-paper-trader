@@ -37,20 +37,57 @@ function controls(doc) {
  * "Buy with card" that aren't the trade action.
  */
 export function findBuyButton(doc = document) {
-  return (
-    controls(doc).find((el) => {
-      const label = labelOf(el)
-      return BUY_WORD.test(label) && !SELL_WORD.test(label) && label.length <= 12
-    }) ?? null
-  )
+  const candidates = controls(doc).filter((el) => {
+    const label = labelOf(el)
+    if (!BUY_WORD.test(label) || SELL_WORD.test(label) || label.length > 20) return false
+    // A Buy/Sell TAB says "Buy" too, and clicking it changes a view rather than placing
+    // a trade. Intercepting it would record a purchase the user never made while leaving
+    // the real submit button untouched.
+    const role = el.getAttribute('role')
+    if (role === 'tab' || el.closest?.('[role="tablist"]')) return false
+    return true
+  })
+
+  // Axiom labels its submit button with the ticker — "Buy DESI" — while the mode toggle
+  // above it is a bare "Buy". Prefer the specific one: it is unambiguously the action.
+  return candidates.find((el) => labelOf(el).length > 4) ?? candidates[0] ?? null
+}
+
+/** The sell submit button — "Sell DESI", or a bare "Sell" that is not a mode tab. */
+export function findSellButton(doc = document) {
+  const candidates = controls(doc).filter((el) => {
+    const label = labelOf(el)
+    if (!SELL_WORD.test(label) || label.length > 20) return false
+    const role = el.getAttribute('role')
+    if (role === 'tab' || el.closest?.('[role="tablist"]')) return false
+    return true
+  })
+  return candidates.find((el) => labelOf(el).length > 5) ?? candidates[0] ?? null
 }
 
 /**
- * Sell presets — buttons labelled with a bare percentage ("25%", "50%", "100%").
- * These are the controls Axiom uses to close part of a position in one click.
+ * Percentage controls — "25%", "50%", "100%".
+ *
+ * Whether clicking one is a TRADE or merely fills in a size depends on the layout, which
+ * is why `presetsAreOneClick` exists. On Axiom they set the size and the trade happens on
+ * the submit button; treating them as trades would record sales the user never made.
  */
 export function findSellButtons(doc = document) {
   return controls(doc).filter((el) => PERCENT.test(labelOf(el)))
+}
+
+/**
+ * True when a preset click IS the trade.
+ *
+ * Axiom's panel has amount presets (0.1 / 2 / 5 / 10) that only populate its AMOUNT
+ * field, with a separate "Buy DESI" button that actually submits. Intercepting a preset
+ * there would book a purchase from a click that, on the real site, does nothing but type
+ * a number — and would simultaneously miss every real trade, since the submit button was
+ * never the thing being watched. So presets only count as one-click trades on a layout
+ * that has no submit button at all.
+ */
+export function presetsAreOneClick(doc = document) {
+  return !findBuyButton(doc) && !findSellButton(doc)
 }
 
 export function percentOf(el) {

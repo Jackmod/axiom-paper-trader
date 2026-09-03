@@ -57,6 +57,24 @@ function App() {
 
   const mint = mintOverride ?? pageContext?.mint ?? null
 
+  // Name, symbol, image and price for whatever token is on screen — resolved as soon as
+  // the token is known, not only once it is held. The background does the fetching
+  // because a page-origin request is subject to the page's CORS.
+  const [tokenInfo, setTokenInfo] = useState(null)
+  useEffect(() => {
+    setTokenInfo(null)
+    if (!mint) return undefined
+    let live = true
+    chrome.runtime.sendMessage({ type: 'TOKEN_INFO', payload: { mint } }, (response) => {
+      // Reading lastError is required, otherwise a torn-down worker logs an unchecked error.
+      if (chrome.runtime.lastError) return
+      if (live && response?.ok) setTokenInfo(response)
+    })
+    return () => {
+      live = false
+    }
+  }, [mint])
+
   // The click listener is attached once and must always see the *current* position,
   // because a sell is a percentage of what is held. Reading it through a ref keeps it
   // fresh without putting `position` in the effect's deps, which would re-attach on
@@ -183,7 +201,12 @@ function App() {
       position={position}
       mint={mint}
       onMintOverride={setMintOverride}
-      priceUsd={pageContext?.priceUsd}
+      tokenName={tokenInfo?.name ?? ''}
+      tokenSymbol={tokenInfo?.symbol ?? ''}
+      tokenImageUrl={tokenInfo?.imageUrl ?? ''}
+      // The API price is authoritative; the page's own number is the fallback for the
+      // moment before it arrives.
+      priceUsd={tokenInfo?.priceUsd ?? pageContext?.priceUsd}
       balanceSol={account.balanceSol}
       solUsdPrice={account.solUsdPrice}
       marketCapText={pageContext?.marketCapText ?? ''}

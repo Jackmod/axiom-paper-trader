@@ -1,8 +1,10 @@
 import {
   findBuyButton,
+  findSellButton,
   findSellButtons,
   findBuyPresets,
   findAmountInput,
+  presetsAreOneClick,
   scrapeTradeContext,
   percentOf,
   amountOf,
@@ -42,19 +44,56 @@ function readSolAmount() {
   return Number(input?.value ?? 0)
 }
 
-// Which control did this click land on? Axiom supports two shapes and we must handle
-// both: one-click SOL presets (the amount is the button's own label) and an explicit
-// Buy button (the amount is in the adjacent field).
+// What the user last picked but has not yet submitted. On Axiom the presets only fill in
+// a size; the trade happens when the submit button is pressed, so the chosen size has to
+// be remembered across those two clicks.
+let pendingSol = null
+let pendingPercent = null
+
+/**
+ * Which control did this click land on?
+ *
+ * Two layouts, and the difference matters enormously:
+ *
+ *  - Submit layout (Axiom's): presets fill the AMOUNT field and "Buy DESI" trades. A
+ *    preset click is NOT a trade — it is remembered, and passed through untouched so
+ *    Axiom's own handler still fills its field.
+ *  - One-click layout: there is no submit button, so the preset itself is the trade.
+ */
 function classifyClick(event) {
   const hits = (el) => el && (event.target === el || el.contains(event.target))
+  const oneClick = presetsAreOneClick()
 
   const preset = findBuyPresets().find(hits)
-  if (preset) return { kind: 'buy', qtySol: amountOf(preset) }
+  if (preset) {
+    const amount = amountOf(preset)
+    if (oneClick) return { kind: 'buy', qtySol: amount }
+    pendingSol = amount // remember the size; let Axiom fill its own field
+    return null
+  }
 
-  if (hits(findBuyButton())) return { kind: 'buy', qtySol: readSolAmount() }
+  const percent = findSellButtons().find(hits)
+  if (percent) {
+    const pct = percentOf(percent)
+    if (oneClick) return { kind: 'sell', sellPercent: pct }
+    pendingPercent = pct
+    return null
+  }
 
-  const sell = findSellButtons().find(hits)
-  if (sell) return { kind: 'sell', sellPercent: percentOf(sell) }
+  if (hits(findBuyButton())) {
+    // The typed amount wins over a remembered preset: if the user picked 2 and then typed
+    // 0.5, they meant 0.5.
+    const typed = readSolAmount()
+    const qtySol = typed > 0 ? typed : pendingSol
+    pendingSol = null
+    return { kind: 'buy', qtySol }
+  }
+
+  if (hits(findSellButton())) {
+    const sellPercent = pendingPercent
+    pendingPercent = null
+    return { kind: 'sell', sellPercent }
+  }
 
   return null
 }

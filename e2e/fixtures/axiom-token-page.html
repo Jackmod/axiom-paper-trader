@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DESI / Desi 84 — Axiom</title>
+    <style>
+      /* Close enough to Axiom's look that a screenshot is worth reading. */
+      body {
+        margin: 0;
+        background: #0b0f14;
+        color: #e8ecf1;
+        font: 13px/1.4 system-ui, sans-serif;
+      }
+      .top { display: flex; gap: 24px; padding: 12px 16px; border-bottom: 1px solid #1e2530; }
+      .panel { width: 320px; padding: 16px; border-left: 1px solid #1e2530; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+      .tabs button { flex: 1; padding: 8px; border: 0; border-radius: 8px; background: #161c26; color: #7d8899; }
+      .tabs button[aria-selected='true'] { background: #16c784; color: #04140d; font-weight: 700; }
+      input { width: 100%; padding: 8px; margin: 8px 0; background: #0f141b; border: 1px solid #232b38; color: #e8ecf1; border-radius: 8px; }
+      .presets { display: flex; gap: 6px; }
+      .presets button, .pcts button { flex: 1; padding: 6px; background: #161c26; color: #e8ecf1; border: 1px solid #232b38; border-radius: 999px; }
+      .pcts { display: flex; gap: 6px; margin-top: 8px; }
+      .submit { width: 100%; margin-top: 12px; padding: 12px; border: 0; border-radius: 10px; background: #16c784; color: #04140d; font-weight: 700; font-size: 15px; }
+      .submit.sell { background: #ec4899; color: #1a0a12; }
+      .chart { flex: 1; padding: 16px; }
+      .muted { color: #7d8899; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <strong>DESI</strong><span class="muted">Desi 84</span>
+      <span>Price <b>$0.000004521</b></span>
+      <span>MC <b>$12.1K</b></span>
+      <span>Liquidity <b>$12.7K</b></span>
+    </div>
+
+    <div style="display: flex">
+      <div class="chart">
+        <div class="muted">Desi 84/USD on Pump V1 · 1s · axiom.trade</div>
+        <!-- A copy-contract-address control, one of the places mint detection looks. -->
+        <button data-clipboard-text="31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump">Copy CA</button>
+        <a href="https://solscan.io/token/31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump">Solscan</a>
+      </div>
+
+      <!-- The trade panel, mirroring Axiom's real structure: mode tabs that merely switch
+           view, amount presets that only FILL the field, and a submit button that trades. -->
+      <div class="panel">
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true">Buy</button>
+          <button role="tab" aria-selected="false">Sell</button>
+        </div>
+
+        <label class="muted" for="amount">AMOUNT</label>
+        <input id="amount" type="number" placeholder="0.0" />
+
+        <div class="presets">
+          <button>0.1</button><button>2</button><button>5</button><button>10</button>
+        </div>
+        <div class="pcts">
+          <button>25%</button><button>50%</button><button>100%</button>
+        </div>
+
+        <button class="submit">Buy DESI</button>
+        <button class="submit sell">Sell DESI</button>
+      </div>
+    </div>
+
+    <script>
+      // Axiom's presets fill the amount field rather than trading. Reproducing that here
+      // is the whole point: it is what makes intercepting a preset a false positive.
+      for (const button of document.querySelectorAll('.presets button')) {
+        button.addEventListener('click', () => {
+          document.getElementById('amount').value = button.textContent.trim()
+        })
+      }
+      // A real trade would go to a wallet. If the extension ever fails to swallow the
+      // click, this fires — and the test asserts it never does.
+      window.__realTradeAttempts = 0
+      for (const button of document.querySelectorAll('.submit')) {
+        button.addEventListener('click', () => {
+          window.__realTradeAttempts += 1
+        })
+      }
+    </script>
+  </body>
+</html>

@@ -19,6 +19,8 @@ export const findBuyButton = () => discovery.findBuyButton(document)
 export const findSellButtons = () => discovery.findSellButtons(document)
 export const findBuyPresets = () => discovery.findBuyPresets(document)
 export const findAmountInput = () => discovery.findAmountInput(document)
+export const findSellButton = () => discovery.findSellButton(document)
+export const presetsAreOneClick = () => discovery.presetsAreOneClick(document)
 export const canIntercept = () => discovery.canIntercept(document)
 export const { percentOf, amountOf } = discovery
 
@@ -39,12 +41,16 @@ export const mintCandidates = () => findMintCandidates(document, window.location
 // costs nothing — which is why none of them can block a trade.
 function readOptionalDetails() {
   const withLabel = (pattern) =>
-    [...document.querySelectorAll('span, div, p')].find(
+    [...document.querySelectorAll('span, div, p, b, strong, em, td, li, h1, h2, h3, h4')].find(
       (el) => el.children.length === 0 && pattern.test((el.textContent || '').trim()),
     )
 
   const price = withLabel(/^\$\s?[\d,]+\.?\d*$/)
-  const marketCap = withLabel(/^(mc|market cap)?\s*\$\s?[\d,.]+[kmb]?$/i)
+  // Market cap must be recognisable AS a market cap: either it carries the label, or it
+  // carries a magnitude suffix ("$12.1K"). With both parts optional this also matched a
+  // bare price, so the panel cheerfully reported a $0.0000045 market cap.
+  const marketCap =
+    withLabel(/^(mc|market cap)\b.*\$\s?[\d,.]+\s?[kmb]?$/i) ?? withLabel(/^\$\s?[\d,.]+\s?[kmb]$/i)
   const slippage = withLabel(/^\d{1,3}(\.\d+)?\s*%$/)
 
   return {
