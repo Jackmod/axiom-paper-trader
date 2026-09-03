@@ -26,11 +26,23 @@ const FIXTURE = `
   <button data-testid="sell-percent-button">100%</button>
 `
 
+// Interception listens on `document`, which survives `document.body.innerHTML = ''`,
+// so every attachment is detached after its test. Without this, a listener from an
+// earlier test keeps preventDefault-ing clicks in later ones.
+const attached = []
+
+function attach(onTrade) {
+  const detach = attachTradeInterception(onTrade)
+  attached.push(detach)
+  return detach
+}
+
 beforeEach(() => {
   document.body.innerHTML = FIXTURE
 })
 
 afterEach(() => {
+  while (attached.length) attached.pop()()
   document.body.innerHTML = ''
   vi.restoreAllMocks()
 })
@@ -42,7 +54,7 @@ function click(el) {
 describe('attachTradeInterception — sell percentage', () => {
   it('reads the percentage from the button the user actually clicked', async () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     click(document.querySelectorAll('[data-testid="sell-percent-button"]')[1]) // the 50% button
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
@@ -52,7 +64,7 @@ describe('attachTradeInterception — sell percentage', () => {
 
   it('reads 100% correctly, so a full close actually closes the position', async () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     click(document.querySelectorAll('[data-testid="sell-percent-button"]')[2])
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
@@ -62,7 +74,7 @@ describe('attachTradeInterception — sell percentage', () => {
 
   it('never reports a 0% sell for a real percentage button (a 0% sell silently closes nothing)', async () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     for (const btn of document.querySelectorAll('[data-testid="sell-percent-button"]')) click(btn)
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalledTimes(3))
@@ -75,7 +87,7 @@ describe('attachTradeInterception — zero real transactions guarantee', () => {
   it('swallows the buy click so Axiom never builds a real transaction', async () => {
     const axiomHandler = vi.fn()
     document.querySelector('[data-testid="buy-button"]').addEventListener('click', axiomHandler)
-    attachTradeInterception(vi.fn())
+    attach(vi.fn())
 
     const event = new MouseEvent('click', { bubbles: true, cancelable: true })
     document.querySelector('[data-testid="buy-button"]').dispatchEvent(event)
@@ -88,7 +100,7 @@ describe('attachTradeInterception — zero real transactions guarantee', () => {
     const axiomHandler = vi.fn()
     const sell = document.querySelector('[data-testid="sell-percent-button"]')
     sell.addEventListener('click', axiomHandler)
-    attachTradeInterception(vi.fn())
+    attach(vi.fn())
 
     const event = new MouseEvent('click', { bubbles: true, cancelable: true })
     sell.dispatchEvent(event)
@@ -99,7 +111,7 @@ describe('attachTradeInterception — zero real transactions guarantee', () => {
 
   it('intercepts a click on an element nested inside the buy button', async () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     click(document.getElementById('buy-inner'))
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
@@ -109,7 +121,7 @@ describe('attachTradeInterception — zero real transactions guarantee', () => {
 
   it('leaves unrelated clicks alone', () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     const other = document.createElement('button')
     document.body.appendChild(other)
@@ -121,10 +133,41 @@ describe('attachTradeInterception — zero real transactions guarantee', () => {
   })
 })
 
+describe('attachTradeInterception — detaching', () => {
+  it('returns a detach handle that stops intercepting, so paper mode can be turned off', () => {
+    const onTrade = vi.fn()
+    const axiomHandler = vi.fn()
+    document.querySelector('[data-testid="buy-button"]').addEventListener('click', axiomHandler)
+
+    const detach = attach(onTrade)
+    detach()
+
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    document.querySelector('[data-testid="buy-button"]').dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(onTrade).not.toHaveBeenCalled()
+    expect(axiomHandler).toHaveBeenCalledTimes(1) // the page's own handler runs again
+  })
+
+  it('detaching one attachment leaves another attachment intercepting', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const detachFirst = attach(first)
+    attach(second)
+
+    detachFirst()
+    click(document.querySelector('[data-testid="buy-button"]'))
+    await vi.waitFor(() => expect(second).toHaveBeenCalledTimes(1))
+
+    expect(first).not.toHaveBeenCalled()
+  })
+})
+
 describe('attachTradeInterception — buy payload', () => {
   it('carries the scraped context, the entered SOL amount, and the quoted fill price', async () => {
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     click(document.querySelector('[data-testid="buy-button"]'))
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
@@ -143,7 +186,7 @@ describe('attachTradeInterception — buy payload', () => {
   it('does nothing when the page has no token mint (not a token page)', () => {
     document.body.innerHTML = '<button data-testid="buy-button">Buy</button>'
     const onTrade = vi.fn()
-    attachTradeInterception(onTrade)
+    attach(onTrade)
 
     click(document.querySelector('[data-testid="buy-button"]'))
 

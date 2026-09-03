@@ -97,7 +97,7 @@ export default defineManifest({
   content_scripts: [
     {
       matches: ['https://axiom.trade/*'],
-      js: ['src/content/inject.js'],
+      js: ['src/content/inject.jsx'],
     },
   ],
   icons: { 16: 'src/icons/icon-16.png', 48: 'src/icons/icon-48.png', 128: 'src/icons/icon-128.png' },
@@ -2689,7 +2689,9 @@ git commit -m "feat: on-page buy/sell widget matching Axiom's native panel"
 
 **Files:**
 
-- Create: `src/content/inject.js`
+- Create: `src/content/inject.jsx`
+- Create (deviation, see below): `src/content/trade-message.js`
+- Test (deviation, see below): `src/content/trade-message.test.js`
 
 **Interfaces:**
 
@@ -2697,10 +2699,20 @@ git commit -m "feat: on-page buy/sell widget matching Axiom's native panel"
 - Produces: the actual content-script entry point registered in `manifest.config.js` (Task 1).
 - **No unit tests in this task, by design:** it's the wiring that mounts an already-unit-tested component (`Widget`, Task 18) into the real, live axiom.trade page via `document.body.appendChild` and reads live `chrome.storage`/`chrome.runtime` — there's no meaningful jsdom stand-in for "the real page." Step 2's manual pass is the correctness check.
 
+> **Deviations from the Step 1 code below, applied in a follow-up `fix:` commit.** Five, in order of severity.
+>
+> 1. **The file is `src/content/inject.jsx`, not `.js`.** Vite 8's oxc transformer refuses JSX inside a `.js` file ("JSX syntax is disabled and should be enabled via the parser options") and `npm run build` fails outright. `manifest.config.js` points at the `.jsx` path, and every other reference in this plan (Task 1's manifest snippet, Task 27's file list/Step 3/Step 7) has been corrected to match.
+> 2. **`setPosition` was never called**, so `position` was permanently `null`: the §6 summary row could never render and every intercepted sell sent `qtySol: (null?.qty ?? 0) * pct = 0`, which `applySell` rejects and the router swallows as an unsurfaced `{ ok: false }` — i.e. no sell could ever execute. The position is now read from `chrome.storage.local` for the current mint and kept live through a `chrome.storage.onChanged` subscription (the background worker is the only writer, so that is the source of truth).
+> 3. **The paper-mode toggle did not toggle anything.** `paperModeEnabled` started at `true`, so interception armed before the settings read resolved; `attachTradeInterception` returned no teardown and the effect had no cleanup, so `paperModeEnabled: false` detached nothing and real Buy clicks kept being `preventDefault`ed and recorded as phantom trades. `attachTradeInterception` now returns a detach handle (covered by two new tests in `trade-interceptor.test.js`), the state starts `undefined` so nothing arms on a guess, and a `chrome.storage.onChanged` listener carries a flipped setting into an already-open tab. Because `position` had been in the interception effect's deps with no cleanup, fixing (2) would otherwise have stacked a second listener per fill and double-counted every click — the position is now read through a ref instead.
+> 4. **`marketCapText`/`rugBadgeText` are passed through to `<Widget>`**, as Task 18's own deviation note requires; without them spec §6's MC and rug badge could never appear on the page even though `scrapeTradeContext()` already scrapes them. The widget's preset buttons are also wired (they were `{}` stubs) through the same scrape, quoted fill price, and BUY/SELL message as a hijacked click, which is what the Step 1 comment claims already happens.
+> 5. **One new file, `src/content/trade-message.js`, with unit tests.** The percent → `qtySol` conversion is pure logic and the plan's testing discipline requires pure logic be tested; it cannot be tested inside `inject.jsx`, whose import mounts the widget as a side effect. Everything genuinely live-DOM/`chrome.*`-dependent stays untested here, as this task intends.
+>
+> **Step 2 (manual pass on the live site) is BLOCKED, not done.** It depends on Task 14 Step 2/4 — a human replacing `dom-scraper.js`'s placeholder selectors on a real token page — which cannot be automated because axiom.trade serves logged-out visitors a marketing page and `/meme/<mint>` sits behind a Cloudflare bot challenge. Until then `findBuyButton()` and `scrapeTradeContext()` return null on the real site and nothing can be intercepted. What *was* verified instead: `npm run build` succeeds and `dist/manifest.json` registers the content script plus its CSS; the full suite (163 tests) and `npm run lint` pass.
+
 - [ ] **Step 1: Implement**
 
 ```jsx
-// src/content/inject.js
+// src/content/inject.jsx
 import { render } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import { Widget } from './widget/Widget.jsx'
@@ -2762,7 +2774,7 @@ Build (`npm run build`), load `dist/` unpacked, open a real axiom.trade token pa
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/content/inject.js
+git add src/content/inject.jsx
 git commit -m "feat: mount on-page widget and wire trade interception end-to-end"
 ```
 
@@ -2983,7 +2995,7 @@ git commit -m "feat: popup quick view with expand-to-side-panel"
 
 - [ ] **Step 1: Write the failing component tests for the Positions tab**
 
-The Positions tab is written test-first since it's pure presentation of a `positions` prop (no chrome.* dependency), unlike `SidePanel.jsx` itself which is mostly storage-wiring glue — that wiring gets its correctness check from the manual end-to-end pass in Task 27, same as `inject.js` in Task 19.
+The Positions tab is written test-first since it's pure presentation of a `positions` prop (no chrome.* dependency), unlike `SidePanel.jsx` itself which is mostly storage-wiring glue — that wiring gets its correctness check from the manual end-to-end pass in Task 27, same as `inject.jsx` in Task 19.
 
 ```jsx
 // src/sidepanel/tabs/Positions.test.jsx
@@ -4262,7 +4274,7 @@ git commit -m "feat: onboarding balance selection and boot intro animation"
 - Create: `src/icons/icon.svg`
 - Create: `src/icons/icon-16.png`, `src/icons/icon-48.png`, `src/icons/icon-128.png`
 - Create: `src/content/selector-warning.js`
-- Modify: `src/content/inject.js`
+- Modify: `src/content/inject.jsx`
 
 **Interfaces:**
 
@@ -4309,7 +4321,7 @@ export function checkInterceptionHealth() {
 - [ ] **Step 3: Wire the health check into the content script entry point**
 
 ```jsx
-// modify src/content/inject.js — call once after the widget mounts
+// modify src/content/inject.jsx — call once after the widget mounts
 import { checkInterceptionHealth } from './selector-warning.js'
 
 setTimeout(checkInterceptionHealth, 1000) // give Axiom's own SPA time to finish its initial render first
@@ -4334,6 +4346,6 @@ Build, load unpacked, and walk the entire flow end to end on a real axiom.trade 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/icons src/content/selector-warning.js src/content/inject.js
+git add src/icons src/content/selector-warning.js src/content/inject.jsx
 git commit -m "feat: extension icon, interception health warning, final v1 wiring"
 ```

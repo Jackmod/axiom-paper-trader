@@ -5,7 +5,9 @@ import { SOL_MINT } from '../lib/price-sources/jupiter.js'
 
 const LAMPORTS_PER_SOL = 1_000_000_000
 
-async function resolveFillPrice(context, qtySol) {
+// Exported so the widget's own preset buttons (inject.jsx) fill at the same quoted
+// execution price as a hijacked click on Axiom's button — one price path, not two.
+export async function resolveFillPrice(context, qtySol) {
   const quoted = await fetchQuotedFillPrice({
     inputMint: SOL_MINT,
     outputMint: context.mint,
@@ -31,35 +33,38 @@ function readSellPercent(button) {
   return parseNumber(button.textContent)
 }
 
+// Returns a detach handle. Interception is conditional on the paper-mode setting
+// (spec §11), so the caller has to be able to disarm it when the setting flips —
+// without one, an unmounted or disabled widget would keep swallowing the user's
+// real Buy clicks for the lifetime of the page.
 export function attachTradeInterception(onTradeConfirmed) {
-  document.addEventListener(
-    'click',
-    async (event) => {
-      const buyButton = findBuyButton()
-      const sellButtons = findSellButtons()
+  const onClick = async (event) => {
+    const buyButton = findBuyButton()
+    const sellButtons = findSellButtons()
 
-      if (buyButton && (event.target === buyButton || buyButton.contains(event.target))) {
-        event.preventDefault()
-        event.stopPropagation()
-        const context = scrapeTradeContext()
-        if (!context) return
-        const qtySol = readSolAmount()
-        const priceUsd = await resolveFillPrice(context, qtySol)
-        onTradeConfirmed({ side: 'buy', ...context, qtySol, priceUsd })
-        return
-      }
+    if (buyButton && (event.target === buyButton || buyButton.contains(event.target))) {
+      event.preventDefault()
+      event.stopPropagation()
+      const context = scrapeTradeContext()
+      if (!context) return
+      const qtySol = readSolAmount()
+      const priceUsd = await resolveFillPrice(context, qtySol)
+      onTradeConfirmed({ side: 'buy', ...context, qtySol, priceUsd })
+      return
+    }
 
-      const clickedSell = sellButtons.find((btn) => event.target === btn || btn.contains(event.target))
-      if (clickedSell) {
-        event.preventDefault()
-        event.stopPropagation()
-        const context = scrapeTradeContext()
-        if (!context) return
-        const percent = readSellPercent(clickedSell)
-        if (percent === null) return // unreadable percentage — drop the trade rather than silently selling 0%
-        onTradeConfirmed({ side: 'sell', ...context, sellPercent: percent, priceUsd: context.priceUsd })
-      }
-    },
-    { capture: true },
-  )
+    const clickedSell = sellButtons.find((btn) => event.target === btn || btn.contains(event.target))
+    if (clickedSell) {
+      event.preventDefault()
+      event.stopPropagation()
+      const context = scrapeTradeContext()
+      if (!context) return
+      const percent = readSellPercent(clickedSell)
+      if (percent === null) return // unreadable percentage — drop the trade rather than silently selling 0%
+      onTradeConfirmed({ side: 'sell', ...context, sellPercent: percent, priceUsd: context.priceUsd })
+    }
+  }
+
+  document.addEventListener('click', onClick, { capture: true })
+  return () => document.removeEventListener('click', onClick, { capture: true })
 }

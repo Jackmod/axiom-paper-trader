@@ -1,50 +1,144 @@
 // src/content/inject.jsx
+//
+// The content-script entry point registered in manifest.config.js. It is `.jsx`, not
+// the plan's `.js`: Vite 8's oxc transformer refuses JSX inside a `.js` file, so the
+// build fails outright with the plan's filename.
 import { render } from 'preact'
-import { useState, useEffect } from 'preact/hooks'
+import { useState, useEffect, useRef, useCallback } from 'preact/hooks'
 import { Widget } from './widget/Widget.jsx'
-import { attachTradeInterception } from './trade-interceptor.js'
+import { attachTradeInterception, resolveFillPrice } from './trade-interceptor.js'
+import { scrapeTradeContext } from './dom-scraper.js'
+import { buildTradeMessage } from './trade-message.js'
+import { DEFAULT_STATE } from '../lib/storage.js'
 import '../ui/tokens.css'
 import '../ui/motion.css'
 
-function App() {
-  const [position, setPosition] = useState(null)
-  const [paperModeEnabled, setPaperModeEnabled] = useState(true)
+const PAPER_MODE_DEFAULT = DEFAULT_STATE.settings.paperModeEnabled
 
+// Axiom is an SPA: at document_idle the token panel usually isn't in the DOM yet, so
+// a single scrape at mount finds nothing and the widget would sit empty until the
+// first trade. Retry briefly, then give up — Task 27's health banner is what tells the
+// user when the selectors never match at all.
+const SCRAPE_RETRY_MS = 1000
+const SCRAPE_RETRY_LIMIT = 15
+
+function App() {
+  // `undefined` = chrome.storage hasn't answered yet. Interception must never arm on a
+  // guess: with the plan's `useState(true)` the listener attached before the settings
+  // read resolved, and since nothing detached it, paper mode could never actually be
+  // off — real Buy clicks stayed swallowed and phantom trades kept being recorded.
+  const [paperModeEnabled, setPaperModeEnabled] = useState(undefined)
+  const [pageContext, setPageContext] = useState(() => scrapeTradeContext())
+  const [position, setPosition] = useState(null)
+
+  const mint = pageContext?.mint ?? null
+
+  // The click listener is attached once and must always see the *current* position,
+  // because a sell is a percentage of what is held. Reading it through a ref keeps it
+  // fresh without putting `position` in the effect's deps, which would re-attach on
+  // every fill and stack duplicate listeners (one click -> N duplicate BUY messages).
+  const positionRef = useRef(null)
+  useEffect(() => {
+    positionRef.current = position
+  }, [position])
+
+  // Paper mode, live: read once and then follow chrome.storage, so flipping the
+  // Settings toggle (spec §11) reaches an already-open axiom.trade tab.
   useEffect(() => {
     chrome.storage.local.get(['settings'], ({ settings }) => {
-      setPaperModeEnabled(settings?.paperModeEnabled ?? true)
+      setPaperModeEnabled(settings?.paperModeEnabled ?? PAPER_MODE_DEFAULT)
+    })
+    const onSettingsChanged = (changes, areaName) => {
+      if (areaName !== 'local' || !changes.settings) return
+      setPaperModeEnabled(changes.settings.newValue?.paperModeEnabled ?? PAPER_MODE_DEFAULT)
+    }
+    chrome.storage.onChanged.addListener(onSettingsChanged)
+    return () => chrome.storage.onChanged.removeListener(onSettingsChanged)
+  }, [])
+
+  // The open position for THIS token, straight from the background's source of truth.
+  // The background service worker is the only writer, so subscribing to storage is how
+  // the widget's summary row and PnL update after a fill — and how a sell knows the
+  // quantity it is a percentage of.
+  useEffect(() => {
+    if (!mint) return undefined
+    let live = true
+    chrome.storage.local.get(['positions'], ({ positions }) => {
+      if (live) setPosition(positions?.[mint] ?? null)
+    })
+    const onPositionsChanged = (changes, areaName) => {
+      if (areaName !== 'local' || !changes.positions) return
+      setPosition(changes.positions.newValue?.[mint] ?? null)
+    }
+    chrome.storage.onChanged.addListener(onPositionsChanged)
+    return () => {
+      live = false
+      chrome.storage.onChanged.removeListener(onPositionsChanged)
+    }
+  }, [mint])
+
+  useEffect(() => {
+    if (mint) return undefined
+    let attempts = 0
+    const timer = setInterval(() => {
+      attempts += 1
+      const scraped = scrapeTradeContext()
+      if (scraped) setPageContext(scraped)
+      if (scraped || attempts >= SCRAPE_RETRY_LIMIT) clearInterval(timer)
+    }, SCRAPE_RETRY_MS)
+    return () => clearInterval(timer)
+  }, [mint])
+
+  const sendTrade = useCallback((trade) => {
+    // Keep the display-only text (spec §6) in step with what was just scraped.
+    setPageContext({ mint: trade.mint, marketCapText: trade.marketCapText, rugBadgeText: trade.rugBadgeText })
+
+    const message = buildTradeMessage(trade, positionRef.current)
+    if (!message) return // nothing held to sell — see trade-message.js
+
+    chrome.runtime.sendMessage(message, (response) => {
+      // The position itself refreshes via the chrome.storage subscription above; this
+      // callback exists so a rejected trade or a torn-down service worker is visible in
+      // the page console instead of vanishing (chrome.runtime.lastError must be read).
+      const error = chrome.runtime.lastError?.message ?? (response?.ok === false ? response.error : null)
+      if (error) console.warn('[axiom-paper-trader] trade not recorded:', error)
     })
   }, [])
 
+  // Interception is armed only once paper mode is *known* to be on, and the effect's
+  // cleanup detaches it the moment that stops being true.
   useEffect(() => {
-    if (!paperModeEnabled) return
-    attachTradeInterception(async (trade) => {
-      const message =
-        trade.side === 'buy'
-          ? { type: 'BUY', payload: trade }
-          : {
-              type: 'SELL',
-              payload: {
-                mint: trade.mint,
-                qtySol: (position?.qty ?? 0) * (trade.sellPercent / 100),
-                priceUsd: trade.priceUsd,
-                priorityFeeSol: trade.priorityFeeSol,
-                slippagePct: trade.slippagePct,
-              },
-            }
-      chrome.runtime.sendMessage(message)
-    })
-  }, [paperModeEnabled, position])
+    if (paperModeEnabled !== true) return undefined
+    return attachTradeInterception(sendTrade)
+  }, [paperModeEnabled, sendTrade])
 
-  function handleBuyPreset(amountSol) {
-    // Optimistic feedback only; the interceptor (attached above) reads the real DOM amount at click time.
-    // This handler exists for the widget's own preset buttons when the widget itself initiates the trade
-    // (as opposed to hijacking Axiom's own button) — both paths funnel through the same BUY message.
+  // The widget's own preset buttons trade through exactly the same path as a hijacked
+  // click on Axiom's button: same scrape, same quoted fill price, same BUY/SELL message.
+  async function handleBuyPreset(amountSol) {
+    const context = scrapeTradeContext()
+    if (!context) return
+    const priceUsd = await resolveFillPrice(context, amountSol)
+    sendTrade({ side: 'buy', ...context, qtySol: amountSol, priceUsd })
   }
 
-  function handleSellPreset(_pct) {}
+  function handleSellPreset(pct) {
+    const context = scrapeTradeContext()
+    if (!context) return
+    sendTrade({ side: 'sell', ...context, sellPercent: pct, priceUsd: context.priceUsd })
+  }
 
-  return <Widget position={position} onBuyPreset={handleBuyPreset} onSellPreset={handleSellPreset} />
+  // Paper mode off (or not yet known) means no widget and no interception at all.
+  if (!paperModeEnabled) return null
+
+  return (
+    <Widget
+      position={position}
+      marketCapText={pageContext?.marketCapText ?? ''}
+      rugBadgeText={pageContext?.rugBadgeText ?? ''}
+      onBuyPreset={handleBuyPreset}
+      onSellPreset={handleSellPreset}
+    />
+  )
 }
 
 const mountPoint = document.createElement('div')
