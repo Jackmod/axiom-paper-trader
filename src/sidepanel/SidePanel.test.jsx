@@ -22,10 +22,10 @@ const STATE = {
     B: { name: 'Bee', symbol: 'B', imageUrl: '', qty: 2, avgEntryUsd: 5, lastPriceUsd: 5.75, stale: false },
   },
   tradeHistory: [
-    { mint: 'W', symbol: 'W', side: 'buy', qtySol: 1, priceUsd: 10 },
-    { mint: 'W', symbol: 'W', side: 'sell', qtySol: 1, priceUsd: 15 },
-    { mint: 'L', symbol: 'L', side: 'buy', qtySol: 1, priceUsd: 10 },
-    { mint: 'L', symbol: 'L', side: 'sell', qtySol: 1, priceUsd: 5 },
+    { id: 't1', mint: 'W', symbol: 'W', side: 'buy', qtySol: 1, priceUsd: 10, timestamp: 1000 },
+    { id: 't2', mint: 'W', symbol: 'W', side: 'sell', qtySol: 1, priceUsd: 15, timestamp: 2000 },
+    { id: 't3', mint: 'L', symbol: 'L', side: 'buy', qtySol: 1, priceUsd: 10, timestamp: 3000 },
+    { id: 't4', mint: 'L', symbol: 'L', side: 'sell', qtySol: 1, priceUsd: 5, timestamp: 4000 },
   ],
 }
 
@@ -135,6 +135,29 @@ describe('SidePanel', () => {
     expect(screen.getByRole('button', { name: 'History' })).toHaveClass('axpt-tab-active')
     expect(screen.getByRole('button', { name: 'Positions' })).not.toHaveClass('axpt-tab-active')
     expect(screen.getByText('2.500 SOL')).toBeInTheDocument() // the stats header spans every tab
+  })
+
+  // The History tab has to be fed from `state.tradeHistory` specifically — asserting
+  // only that the Positions list vanished would still pass if the tab rendered nothing.
+  it('renders the trade log from state.tradeHistory on the History tab', async () => {
+    render(<SidePanel />)
+    await waitFor(() => expect(screen.getByText('Ay')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+
+    await waitFor(() => expect(screen.getByText('1.0000 SOL @ $15.000000')).toBeInTheDocument())
+    expect(screen.getAllByRole('listitem')).toHaveLength(4) // one row per logged trade, newest first
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('1.0000 SOL @ $5.000000')
+  })
+
+  it('shows the History empty state on a fresh install, where tradeHistory is undefined', async () => {
+    mockChromeWithState({})
+    render(<SidePanel />)
+    await waitFor(() => expect(screen.getByText('0.000 SOL')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+
+    await waitFor(() => expect(screen.getByText(/no trades yet/i)).toBeInTheDocument())
   })
 
   it('re-renders live when the background writes to chrome.storage.local', async () => {
