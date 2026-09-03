@@ -38,7 +38,25 @@ describe('balance actions', () => {
       portfolioSnapshots: [{ timestamp: 1 }],
     }
     const next = resetAccount(state, 5)
-    expect(next).toMatchObject({ balanceSol: 5, positions: {}, tradeHistory: [], portfolioSnapshots: [] })
+    expect(next.balanceSol).toBe(5)
+    // NOT toMatchObject: its subset semantics make `positions: {}` vacuously true for ANY object, so
+    // deleting the `positions: {}` clause from resetAccount would still pass. toEqual is exact.
+    expect(next.positions).toEqual({})
+    expect(next.tradeHistory).toEqual([])
+    expect(next.portfolioSnapshots).toEqual([])
+  })
+
+  it('topUp and withdraw reject a non-finite amount rather than poisoning balanceSol with NaN', () => {
+    expect(() => topUp({ ...DEFAULT_STATE, balanceSol: 1 }, NaN)).toThrow()
+    expect(() => topUp({ ...DEFAULT_STATE, balanceSol: 1 }, Infinity)).toThrow()
+    expect(() => withdraw({ ...DEFAULT_STATE, balanceSol: 1 }, NaN)).toThrow()
+    expect(() => withdraw({ ...DEFAULT_STATE, balanceSol: 1 }, Infinity)).toThrow()
+  })
+
+  it('resetAccount rejects a non-finite or negative starting balance (but allows exactly zero)', () => {
+    expect(() => resetAccount(DEFAULT_STATE, NaN)).toThrow()
+    expect(() => resetAccount(DEFAULT_STATE, -1)).toThrow()
+    expect(resetAccount(DEFAULT_STATE, 0).balanceSol).toBe(0) // 0 is the onboarding-gate value, must stay legal
   })
 
   it('resetAccount preserves settings (paper-mode toggle survives a reset)', () => {

@@ -201,12 +201,78 @@ describe('SYNC_NOW', () => {
 
 describe('balance messages', () => {
   it('TOP_UP, WITHDRAW, RESET_ACCOUNT route through to balance-actions', async () => {
-    let state = { ...DEFAULT_STATE, balanceSol: 1 }
+    let state = freshState({ balanceSol: 1 })
     state = (await handleMessage({ type: 'TOP_UP', payload: { solAmount: 2 } }, state)).nextState
     expect(state.balanceSol).toBe(3)
     state = (await handleMessage({ type: 'WITHDRAW', payload: { solAmount: 1 } }, state)).nextState
     expect(state.balanceSol).toBe(2)
     state = (await handleMessage({ type: 'RESET_ACCOUNT', payload: { startingBalanceSol: 10 } }, state)).nextState
     expect(state.balanceSol).toBe(10)
+  })
+
+  it('RESET_ACCOUNT clears positions, history, and snapshots through the router', async () => {
+    let state = freshState({ balanceSol: 1 })
+    state = (
+      await handleMessage(
+        {
+          type: 'BUY',
+          payload: {
+            mint: 'M',
+            symbol: 'M',
+            name: 'M',
+            imageUrl: '',
+            qtySol: 0.1,
+            priceUsd: 10,
+            priorityFeeSol: 0,
+            slippagePct: 0,
+          },
+        },
+        state,
+      )
+    ).nextState
+    state = { ...state, portfolioSnapshots: [{ timestamp: 1, totalValueUsd: 1 }] }
+    expect(Object.keys(state.positions)).toHaveLength(1) // guard: the reset below must have something to clear
+
+    const { nextState, response } = await handleMessage(
+      { type: 'RESET_ACCOUNT', payload: { startingBalanceSol: 10 } },
+      state,
+    )
+    expect(response).toEqual({ ok: true })
+    expect(nextState.positions).toEqual({})
+    expect(nextState.tradeHistory).toEqual([])
+    expect(nextState.portfolioSnapshots).toEqual([])
+  })
+
+  it('WITHDRAW for more than the balance returns an error response instead of throwing (state unchanged)', async () => {
+    const state = freshState({ balanceSol: 1 })
+    // snapshot BEFORE the call: the router returns the same object reference on the error path, so
+    // comparing nextState against the live `state` object could never catch an in-place mutation.
+    const snapshot = structuredClone(state)
+    const { nextState, response } = await handleMessage({ type: 'WITHDRAW', payload: { solAmount: 5 } }, state)
+    expect(response.ok).toBe(false)
+    expect(response.error).toBeTruthy()
+    expect(nextState).toEqual(snapshot)
+  })
+
+  it('TOP_UP with an invalid amount returns an error response instead of throwing (state unchanged)', async () => {
+    const state = freshState({ balanceSol: 1 })
+    const snapshot = structuredClone(state)
+    for (const solAmount of [0, -1, NaN]) {
+      const { nextState, response } = await handleMessage({ type: 'TOP_UP', payload: { solAmount } }, state)
+      expect(response.ok).toBe(false)
+      expect(response.error).toBeTruthy()
+      expect(nextState).toEqual(snapshot)
+    }
+  })
+
+  it('RESET_ACCOUNT with an invalid starting balance returns an error response instead of throwing', async () => {
+    const state = freshState({ balanceSol: 1 })
+    const snapshot = structuredClone(state)
+    const { nextState, response } = await handleMessage(
+      { type: 'RESET_ACCOUNT', payload: { startingBalanceSol: NaN } },
+      state,
+    )
+    expect(response.ok).toBe(false)
+    expect(nextState).toEqual(snapshot)
   })
 })
