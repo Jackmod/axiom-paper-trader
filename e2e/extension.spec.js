@@ -228,3 +228,18 @@ test('a position can be closed from the side panel, with no Axiom page in sight'
 
   await context.close()
 })
+
+test('a busy token page — dozens of holder wallets — still enables buying', async () => {
+  const { context, page } = await launch()
+  await page.goto(TOKEN_URL)
+  await expect(widget(page)).toBeVisible({ timeout: 15000 })
+
+  // Reported as "the buy panel is now gone": the first version of the feed guard counted
+  // addresses on the page, and a holders table is nothing but addresses — so the guard
+  // meant to suppress feeds suppressed real token pages too.
+  await expect(widget(page)).not.toContainText(/No token open/i)
+  await expect(page.getByRole('button', { name: 'Buy 0.25 SOL' })).toBeEnabled()
+  await page.screenshot({ path: join(SHOTS, '07-busy-token-page.png') })
+
+  await context.close()
+})

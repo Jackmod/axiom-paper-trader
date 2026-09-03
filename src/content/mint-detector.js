@@ -115,10 +115,14 @@ export function findMintCandidates(doc = document, url = window.location.href) {
     .sort((a, b) => b.weight - a.weight)
 }
 
-// How many distinct mints a page may mention before its DOM stops being evidence about
-// which token the user is looking at. A token page names a handful of addresses; a feed
-// names one per row.
-const AMBIGUITY_LIMIT = 3
+// Sources that point at ONE token deliberately: a copy-contract-address button, a link to
+// this token on an explorer, an element that names a mint outright. A page puts these on
+// the thing it is about.
+//
+// Bare text is different. A token page prints addresses everywhere — holders, traders,
+// wallets — and a discovery feed prints one per row, so text alone says only "an address
+// exists here", never "this is what you are looking at".
+const DELIBERATE_SOURCES = ['explorer-link', 'attr:']
 
 /**
  * The token the user is actually looking at, or null.
@@ -135,8 +139,18 @@ export function detectMint(doc = document, url = window.location.href) {
   const candidates = findMintCandidates(doc, url)
   if (candidates.length === 0) return null
 
+  // The route wins outright. A token page also lists holders, traders and wallets — all
+  // valid base58 — so counting addresses would suppress detection on exactly the pages it
+  // needs to work on. Nothing on the page outvotes the address the user navigated to.
   const fromUrl = candidates.find((candidate) => candidate.sources.some((source) => source.startsWith('url-')))
   if (fromUrl) return fromUrl.mint
 
-  return candidates.length <= AMBIGUITY_LIMIT ? candidates[0].mint : null
+  // No token in the route: accept only a mint the page pointed at deliberately, and only
+  // if it points at exactly one. Several such tokens means a listing, and picking the
+  // top-scoring one is how the widget latched onto a coin off the Pulse feed and offered
+  // to trade it — one click from a position in something never opened.
+  const deliberate = candidates.filter((candidate) =>
+    candidate.sources.some((source) => DELIBERATE_SOURCES.some((kind) => source.startsWith(kind))),
+  )
+  return deliberate.length === 1 ? deliberate[0].mint : null
 }

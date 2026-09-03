@@ -76,9 +76,14 @@ describe('findMintCandidates — where a mint can come from', () => {
     expect(detectMint(document, 'https://axiom.trade/discover')).toBe(MINT)
   })
 
-  it('finds a bare address printed in the page text as a last resort', () => {
+  it('does NOT trust a bare address in page text on its own', () => {
+    // A token page prints addresses everywhere — holders, traders, wallets — and a feed
+    // prints one per row. Text alone says an address exists, never that it is the token
+    // the user is looking at.
     document.body.innerHTML = `<span>${MINT}</span>`
-    expect(detectMint(document, 'https://axiom.trade/discover')).toBe(MINT)
+    expect(detectMint(document, 'https://axiom.trade/discover')).toBeNull()
+    // It is still gathered as a candidate, so a caller can inspect or confirm it.
+    expect(findMintCandidates(document, 'https://axiom.trade/discover')[0].mint).toBe(MINT)
   })
 
   it('returns nothing on a page with no token at all', () => {
@@ -110,7 +115,9 @@ describe('findMintCandidates — ranking', () => {
 
   it('breaks a tie toward a pump.fun mint, which ends in "pump" by construction', () => {
     document.body.innerHTML = `<span>${OTHER}</span><span>${MINT}</span>`
-    expect(detectMint(document, 'https://axiom.trade/discover')).toBe(MINT)
+    // Ranking still applies to the candidate list; detectMint separately refuses to act
+    // on text-only evidence, which is why this asserts the ordering rather than the pick.
+    expect(findMintCandidates(document, 'https://axiom.trade/discover')[0].mint).toBe(MINT)
   })
 
   it('never surfaces SOL or USDC even though they are all over a trading page', () => {
@@ -131,7 +138,7 @@ describe('findMintCandidates — ranking', () => {
   })
 
   it('survives a malformed URL instead of throwing detection away entirely', () => {
-    document.body.innerHTML = `<span>${MINT}</span>`
+    document.body.innerHTML = `<button data-clipboard-text="${MINT}">Copy CA</button>`
     expect(detectMint(document, 'not a url')).toBe(MINT)
   })
 })
@@ -176,5 +183,38 @@ describe('detectMint — a listing page is not a token page', () => {
   it('reports the candidates either way, so a caller can still inspect them', () => {
     document.body.innerHTML = feedOf([MINT, OTHER, 'A1B2C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2pump'])
     expect(findMintCandidates(document, 'https://axiom.trade/pulse').length).toBeGreaterThan(0)
+  })
+})
+
+// Reported immediately after the feed fix: "the buy panel is now gone". The first version
+// of that fix counted addresses on the page and gave up above a threshold — but a real
+// token page lists holders, traders and wallets, all of them valid base58, so the guard
+// meant to suppress feeds also suppressed the pages it needed to work on.
+describe('detectMint — a busy token page is still a token page', () => {
+  const wallets = Array.from(
+    { length: 40 },
+    (_, i) => `W${String(i).padStart(2, '0')}C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3`,
+  )
+  const holderTable = wallets.map((w) => `<tr><td>${w}</td></tr>`).join('')
+
+  it('detects the routed token even with dozens of wallet addresses on the page', () => {
+    document.body.innerHTML = `<table>${holderTable}</table>`
+    expect(detectMint(document, `https://axiom.trade/meme/${MINT}`)).toBe(MINT)
+  })
+
+  it('detects a token pointed at deliberately, even amid a crowded page', () => {
+    // A copy-contract-address button names the token the page is ABOUT; the wallet list
+    // is just data on it.
+    document.body.innerHTML = `<button data-clipboard-text="${MINT}">Copy CA</button><table>${holderTable}</table>`
+    expect(detectMint(document, 'https://axiom.trade/discover')).toBe(MINT)
+  })
+
+  it('still refuses when several tokens are each pointed at deliberately', () => {
+    // That is a listing, not a token page.
+    document.body.innerHTML = `
+      <a href="https://solscan.io/token/${MINT}">a</a>
+      <a href="https://solscan.io/token/${OTHER}">b</a>
+    `
+    expect(detectMint(document, 'https://axiom.trade/pulse')).toBeNull()
   })
 })
