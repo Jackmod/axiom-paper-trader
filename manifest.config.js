@@ -12,6 +12,7 @@ export default defineManifest({
   host_permissions: [
     'https://axiom.trade/*',
     'https://api.jup.ag/*',
+    'https://lite-api.jup.ag/*',
     'https://quote-api.jup.ag/*',
     'https://api.dexscreener.com/*',
     'https://frontend-api-v2.pump.fun/*',
