@@ -39,6 +39,20 @@ export async function resolveFillPrice(context, qtySol) {
   return quoted ?? info.priceUsd ?? context.priceUsd // quote > spot > whatever the page showed
 }
 
+/**
+ * The token's current price, for closing a position.
+ *
+ * Buys were priced from Jupiter's quote while sells were priced from a number scraped off
+ * the page — and the scraper cheerfully matched an unrelated "$1.76" elsewhere in the UI.
+ * A sell of a $0.000015 token booked at $1.76 is a ~120,000x error, which turned a small
+ * paper account into 231,967 SOL. The exit price now comes from the same authoritative
+ * source the entry did; the page's number is a last resort, never a silent substitute.
+ */
+export async function resolveCurrentPrice(context) {
+  const info = await fetchJupiterTokenInfo(context.mint)
+  return info?.priceUsd ?? context.priceUsd ?? null
+}
+
 function readSolAmount() {
   const input = findAmountInput()
   return Number(input?.value ?? 0)
@@ -123,7 +137,9 @@ export function attachTradeInterception(onTradeConfirmed) {
     }
 
     if (!hit.sellPercent) return // unreadable percentage — never a silent 0% sell
-    onTradeConfirmed({ side: 'sell', ...context, sellPercent: hit.sellPercent, priceUsd: context.priceUsd })
+    const priceUsd = await resolveCurrentPrice(context)
+    if (!(priceUsd > 0)) return // no trustworthy exit price: refuse rather than book a wrong one
+    onTradeConfirmed({ side: 'sell', ...context, sellPercent: hit.sellPercent, priceUsd })
   }
 
   document.addEventListener('click', onClick, { capture: true })

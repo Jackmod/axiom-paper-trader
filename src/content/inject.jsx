@@ -6,7 +6,7 @@
 import { render } from 'preact'
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks'
 import { Widget } from './widget/Widget.jsx'
-import { attachTradeInterception, resolveFillPrice } from './trade-interceptor.js'
+import { attachTradeInterception, resolveFillPrice, resolveCurrentPrice } from './trade-interceptor.js'
 import { scrapeTradeContext } from './dom-scraper.js'
 import { buildTradeMessage } from './trade-message.js'
 import { checkInterceptionHealth } from './selector-warning.js'
@@ -21,6 +21,9 @@ const PAPER_MODE_DEFAULT = DEFAULT_STATE.settings.paperModeEnabled
 // a single scrape at mount finds nothing and the widget would sit empty until the
 // first trade. Retry briefly, then give up — Task 27's health banner is what tells the
 // user when the selectors never match at all.
+// Spec §9's real-time tier: 7s sits inside the 5-10s window the Side Panel also uses.
+export const PRICE_POLL_MS = 7000
+
 const SCRAPE_RETRY_MS = 1000
 const SCRAPE_RETRY_LIMIT = 15
 
@@ -73,6 +76,26 @@ function App() {
     return () => {
       live = false
     }
+  }, [mint])
+
+  // Keep the price live while the user is watching the chart.
+  //
+  // Without this the widget was frozen: the background only repriced on its 1-minute
+  // alarm, and TOKEN_INFO was fetched once when the token changed — so the chart moved
+  // and the paper position sat stagnant, showing a PnL that had nothing to do with the
+  // market. The Side Panel already polls in the spec's 5-10s window; the on-page widget
+  // has exactly the same need, and is in fact where the user is looking.
+  useEffect(() => {
+    if (!mint) return undefined
+    const tick = () => {
+      chrome.runtime.sendMessage({ type: 'SYNC_NOW' }, () => void chrome.runtime.lastError)
+      chrome.runtime.sendMessage({ type: 'TOKEN_INFO', payload: { mint } }, (response) => {
+        if (chrome.runtime.lastError) return
+        if (response?.ok) setTokenInfo(response)
+      })
+    }
+    const timer = setInterval(tick, PRICE_POLL_MS)
+    return () => clearInterval(timer)
   }, [mint])
 
   // The click listener is attached once and must always see the *current* position,
@@ -187,10 +210,14 @@ function App() {
     sendTrade({ side: 'buy', ...context, solSpent: amountSol, priceUsd })
   }
 
-  function handleSellPreset(pct) {
+  async function handleSellPreset(pct) {
     const context = tradeContext()
     if (!context) return
-    sendTrade({ side: 'sell', ...context, sellPercent: pct, priceUsd: context.priceUsd })
+    // Same authoritative price the buy used — never the page's scraped number, which
+    // once matched an unrelated .76 and booked a 120,000x mispriced exit.
+    const priceUsd = await resolveCurrentPrice(context)
+    if (!(priceUsd > 0)) return
+    sendTrade({ side: 'sell', ...context, sellPercent: pct, priceUsd })
   }
 
   // Paper mode off (or not yet known) means no widget and no interception at all.
