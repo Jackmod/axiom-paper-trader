@@ -1291,9 +1291,19 @@ git commit -m "feat: tiered price resolver (Jupiter -> DexScreener -> pump.fun)"
 
 - Produces: `fetchQuotedFillPrice({ inputMint, outputMint, amountLamports }) -> Promise<number|null>` (USD-equivalent price per token reflecting real liquidity/slippage for that trade size, per spec §5). The trade interceptor (Task 15) calls this for the real fill price.
 
+> **VERIFIED 2026-09-03 (per Step 1) — the drafted host is dead, and the drafted derivation returns the wrong currency.** Live requests:
+>
+> - **`quote-api.jup.ag` no longer resolves at all** (no A/AAAA record; `curl` fails before the network with "could not resolve host"). The v6 quote endpoint moved to **`https://lite-api.jup.ag/swap/v1/quote`** — the keyless free tier, the same host `jupiter.js` already uses for prices, already in `host_permissions`. Query params (`inputMint`, `outputMint`, `amount`, `slippageBps`) and the `inAmount`/`outAmount` decimal-string response fields are unchanged from v6, so only the URL moves.
+> - **`inAmount / outAmount` is SOL per token, not USD per token.** Every consumer of this value is USD-denominated — the Interfaces line above, the storage schema (`avgEntryUsd`, `lastPriceUsd`, `tradeHistory[].priceUsd`, spec §12), and the DOM-displayed price this is the interchangeable fallback for (spec §5). Shipping the raw ratio would have understated every quoted entry by the SOL/USD rate (~100x) and, worse, mixed two currencies inside the one-position-per-mint weighted average (Global Constraint above), which is unrecoverable after the fact. **The SOL leg must be converted to USD inside this module** so Task 15's `quoted ?? context.priceUsd` stays unit-consistent; Task 15 needs no change.
+> - **The live v1 response carries its own `swapUsdValue`** — Jupiter's USD valuation of that exact route — which is exact for the "USD paid / tokens received" definition of a fill price and costs no extra request. Use it when present; fall back to `fetchJupiterPrice(SOL_MINT)` for the SOL/USD spot rate when it is absent, and return `null` (not a SOL-denominated number) when neither is available.
+> - **Validated on a known-price mint:** quoting 0.1 SOL into USDC returns `outAmount: "10031790"` with `swapUsdValue: "10.030…"`, i.e. **$1.0000 per USDC** — the raw SOL-per-token figure would have been $0.00997.
+> - As in Task 7, `Number(...)` on a malformed amount yields `NaN`, which survives both a `!x` guard and Task 15's `??` fallback and would land as `priceUsd: NaN` in the position engine; the shipped client therefore collapses every non-finite intermediate to `null`.
+>
+> **Steps 2 and 4 below are the original draft and are superseded by the shipped `src/lib/price-sources/jupiter-quote.js` and `.test.js`** — read those, not the blocks below. Step 2's `expect(price).toBeCloseTo(0.1 / 1000)` in particular is both the wrong currency and, at Vitest's default precision of 2, an assertion a `null`-returning stub passes (the same defect Task 7's note records); the shipped suite pins types and explicit precision, asserts the requested URL, and was re-verified by mutation.
+
 - [ ] **Step 1: Verify the current Jupiter Quote API contract**
 
-Before writing code: check the current Jupiter Quote API docs (`quote-api.jup.ag/v6/quote` as of this plan's writing) for the exact query params and response shape. The implementation below assumes `GET /v6/quote?inputMint=&outputMint=&amount=<lamports>&slippageBps=` returning `{ inAmount, outAmount, ... }`, where price-per-token is derived from `inAmount`/`outAmount`. Adjust if the live docs differ.
+Before writing code: check the current Jupiter Quote API docs (`quote-api.jup.ag/v6/quote` as of this plan's writing — see the VERIFIED note above: it is retired) for the exact query params and response shape. The implementation below assumes `GET /v6/quote?inputMint=&outputMint=&amount=<lamports>&slippageBps=` returning `{ inAmount, outAmount, ... }`, where price-per-token is derived from `inAmount`/`outAmount`. Adjust if the live docs differ.
 
 - [ ] **Step 2: Write the failing tests**
 

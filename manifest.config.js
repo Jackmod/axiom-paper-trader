@@ -13,7 +13,6 @@ export default defineManifest({
     'https://axiom.trade/*',
     'https://api.jup.ag/*',
     'https://lite-api.jup.ag/*',
-    'https://quote-api.jup.ag/*',
     'https://api.dexscreener.com/*',
     'https://frontend-api-v3.pump.fun/*',
     'wss://pumpportal.fun/*',
