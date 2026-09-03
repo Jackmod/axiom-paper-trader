@@ -198,14 +198,28 @@ rows in the live position view (§6).
      new, pre-graduation), which won't appear in either of the above yet.
      This is a REST call on each alarm tick, same cadence as the others.
 - **Real-time tier:** while the Side Panel (or popup) is open, it polls
-  faster (every 5–10s) for tokens on Jupiter/DexScreener, and additionally
-  opens a `pumpportal.fun` websocket subscription for any open position
-  still on the bonding curve, giving real-time ticks instead of waiting on
-  REST polling. The websocket connection lives in the Side Panel's page
-  context (not the service worker) because MV3 service workers are
-  non-persistent and cannot reliably hold a long-lived socket open — see
-  §16. When the Side Panel is closed, that position falls back to the
-  1-minute REST-polled alarm cadence like everything else.
+  faster (every 5–10s) for tokens on Jupiter/DexScreener. The websocket
+  connection, when active, lives in the Side Panel's page context (not the
+  service worker) because MV3 service workers are non-persistent and cannot
+  reliably hold a long-lived socket open — see §16. When the Side Panel is
+  closed, everything falls back to the 1-minute REST-polled alarm cadence.
+- **REVISED 2026-09-03 — the `pumpportal.fun` websocket tier is opt-in and
+  inert by default.** The original design assumed a keyless subscription.
+  Verifying the live service during implementation showed otherwise: it
+  answers a keyless `subscribeTokenTrade` with *"only available when
+  connecting with an API key funded with at least 0.02 SOL"*, and meters
+  token-trade events at ~0.01 SOL per 10,000. Only `subscribeNewToken` and
+  `subscribeMigration` are free. That requirement contradicts this project's
+  first non-negotiable — no wallet connection anywhere (§3) — and it
+  contradicts the product's premise, since demanding real SOL to practise
+  paper trading defeats the point. **Resolution:** the module opens no socket
+  and returns a no-op unless the user supplies their own API key; bonding-curve
+  tokens are priced by the pump.fun REST tier above, which already covers them
+  at both cadences. Nothing in the product's promised behaviour depended on the
+  websocket — it was only ever described here as a "while watching"
+  enhancement, never a background guarantee. If a user opts in with their own
+  funded key, the fast path switches on for them alone; the extension itself
+  still never holds or connects a wallet.
 - Refreshed prices update `chrome.storage.local`; the Side Panel and popup
   listen for storage changes and re-render reactively.
 - **Sync on reopen:** `chrome.alarms` only fires while Chrome itself is
@@ -374,9 +388,19 @@ itself.
   own page in v1 rather than a separate API — if that data isn't present in
   the DOM at click time, it's simply omitted from that trade's confirmation
   rather than blocking the trade.
-- The `pumpportal.fun` websocket (§9) only runs while the Side Panel/popup
-  page is open, since a persistent socket can't reliably live inside a
-  non-persistent MV3 service worker. In the background (panel closed),
-  bonding-curve tokens fall back to 1-minute REST polling of the pump.fun
-  API like any other position — real-time ticks are a "while watching"
-  enhancement, not a background guarantee.
+- The `pumpportal.fun` websocket (§9) is inert unless a user supplies their
+  own funded API key, because the service gates token-trade streams behind a
+  wallet-funded key that this project will not require. Bonding-curve tokens
+  are therefore priced by REST polling of the pump.fun API at both cadences.
+  Even when a user does opt in, the socket only runs while the Side Panel or
+  popup page is open, since a persistent socket can't reliably live inside a
+  non-persistent MV3 service worker.
+- **The single largest remaining unknown is whether Axiom's real DOM matches
+  `SELECTORS` in `src/content/dom-scraper.js`.** Those selectors are
+  placeholders: axiom.trade serves logged-out visitors a marketing page and
+  puts token pages behind a bot challenge, so no automated agent can read the
+  real trading UI. Until a human opens a logged-in token page, fills in the
+  real selectors, and confirms interception, `findBuyButton()` returns null
+  and the extension is inert on the live site. Every layer beneath it —
+  position engine, storage, price sourcing, background refresh, UI — is
+  independently tested and does not depend on this being resolved first.
