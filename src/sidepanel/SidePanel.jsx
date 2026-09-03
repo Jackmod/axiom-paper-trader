@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { Positions } from './tabs/Positions.jsx'
+import { History } from './tabs/History.jsx'
 import { getPortfolioStats } from '../lib/portfolio-stats.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
@@ -65,7 +66,10 @@ export function SidePanel() {
           </button>
         ))}
       </nav>
-      <div class="axpt-tab-content">{tab === 'Positions' && <Positions positions={state.positions} />}</div>
+      <div class="axpt-tab-content">
+        {tab === 'Positions' && <Positions positions={state.positions} />}
+        {tab === 'History' && <History tradeHistory={state.tradeHistory} />}
+      </div>
     </div>
   )
 }
