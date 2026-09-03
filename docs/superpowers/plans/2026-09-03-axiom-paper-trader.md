@@ -848,6 +848,17 @@ git commit -m "feat: portfolio snapshot capture with rolling cap"
 
 Before writing code: fetch `https://station.jup.ag/docs/apis/price-api` (or the current Jupiter docs) and confirm the exact endpoint URL and response shape — Jupiter has changed this API's host/path before (`price.jup.ag` → `api.jup.ag/price/v2`). Use whatever the docs currently say; the implementation below assumes `GET https://api.jup.ag/price/v2?ids=<mint>` returning `{ data: { [mint]: { price: "12.34" } } }`. Update the client and this note if the live docs differ.
 
+> **VERIFIED 2026-09-03 — the assumption above is stale; the API moved again.** `GET https://api.jup.ag/price/v2?ids=<mint>` now returns **HTTP 404** (v2 retired), so the drafted client below would have silently returned `null` forever. Current contract, confirmed by live request:
+>
+> - **Endpoint:** `GET https://lite-api.jup.ag/price/v3?ids=<mint>` — `lite-api.jup.ag` is the keyless free tier. The paid host `api.jup.ag/price/v3` expects an `x-api-key` header, which an extension bundle has nowhere safe to store, so the lite host is the correct choice here.
+> - **Response:** keyed directly by mint with **no `data` wrapper**, and the price field is **`usdPrice` as a number** (not `price` as a string):
+>   ```json
+>   { "So111...112": { "usdPrice": 100.31, "blockId": 443932398, "decimals": 9, "priceChange24h": 1.14, "liquidity": 802580915.29, "createdAt": "2024-06-05T08:55:25.527Z" } }
+>   ```
+> - **Token not found:** `{}` with HTTP 200 (not a 404), so the "missing token" path is a key lookup, not a status check.
+>
+> Step 2's test fixtures and Step 4's implementation below have been updated to this shape. Task 7's fallback clients and Task 8's resolver should re-verify their own endpoints the same way rather than trusting drafted URLs.
+
 - [ ] **Step 2: Write the failing tests**
 
 ```js
@@ -861,14 +872,14 @@ beforeEach(() => {
 
 describe('fetchJupiterPrice', () => {
   it('returns the USD price as a number on success', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ data: { M: { price: '13.4' } } }) })
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ M: { usdPrice: 13.4 } }) })
     const price = await fetchJupiterPrice('M')
     expect(price).toBeCloseTo(13.4)
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('M'))
   })
 
   it('returns null when the token is not present in the response', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
+    fetch.mockResolvedValue({ ok: true, json: async () => ({}) })
     expect(await fetchJupiterPrice('missing')).toBeNull()
   })
 
@@ -911,11 +922,11 @@ export const SOL_MINT = 'So11111111111111111111111111111111111111112'
 
 export async function fetchJupiterPrice(mint) {
   try {
-    const res = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`)
+    const res = await fetch(`https://lite-api.jup.ag/price/v3?ids=${mint}`)
     if (!res.ok) return null
     const body = await res.json()
-    const entry = body.data?.[mint]
-    return entry ? Number(entry.price) : null
+    const entry = body?.[mint]
+    return entry ? Number(entry.usdPrice) : null
   } catch {
     return null // network failure, DNS failure, malformed JSON — all treated as "no price available", never a crash
   }
