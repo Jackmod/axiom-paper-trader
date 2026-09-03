@@ -69,4 +69,39 @@ describe('bucketSnapshotsByDay', () => {
     expect(buckets['2026-09-01']).toBe(0)
     expect(Object.keys(buckets)).toHaveLength(1)
   })
+
+  // A stored history can hold an entry whose total was never written, or was written as
+  // NaN. "Last wins" would let that entry become the day's close, and the calendar then
+  // calls `.toFixed()` on it and takes the whole panel down. Skipping it keeps the last
+  // *readable* close, which is a real number the user actually saw.
+  it('ignores an unreadable reading instead of letting it become the day close', () => {
+    const buckets = bucketSnapshotsByDay([
+      { timestamp: new Date('2026-09-01T09:00:00').getTime(), totalPnlSol: 3 },
+      { timestamp: new Date('2026-09-01T18:00:00').getTime(), totalPnlSol: undefined },
+      { timestamp: new Date('2026-09-01T20:00:00').getTime(), totalPnlSol: Number.NaN },
+      { timestamp: new Date('2026-09-01T22:00:00').getTime() },
+    ])
+    expect(buckets).toEqual({ '2026-09-01': 3 })
+  })
+
+  // A day with nothing readable in it gets no cell at all. Substituting 0 would paint a
+  // break-even day the user never had, next to days that are real.
+  it('produces no day at all when every reading for it is unreadable', () => {
+    const buckets = bucketSnapshotsByDay([
+      { timestamp: new Date('2026-09-01T09:00:00').getTime(), totalPnlSol: Number.NaN },
+      { timestamp: new Date('2026-09-02T09:00:00').getTime(), totalPnlSol: 2 },
+    ])
+    expect(buckets).toEqual({ '2026-09-02': 2 })
+  })
+
+  // A snapshot with no usable timestamp cannot be placed on any day; it must not create
+  // an "Invalid Date"-keyed phantom cell.
+  it('drops a reading with no usable timestamp', () => {
+    const buckets = bucketSnapshotsByDay([
+      { totalPnlSol: 5 },
+      { timestamp: Number.NaN, totalPnlSol: 6 },
+      { timestamp: new Date('2026-09-02T09:00:00').getTime(), totalPnlSol: 2 },
+    ])
+    expect(buckets).toEqual({ '2026-09-02': 2 })
+  })
 })

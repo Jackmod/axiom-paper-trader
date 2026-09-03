@@ -6,7 +6,7 @@
 import { useState } from 'preact/hooks'
 import { TokenIcon } from '../../ui/TokenIcon.jsx'
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
-import { formatPrice, formatSol, formatPercent, formatTokenAmount } from '../../ui/format.js'
+import { formatPrice, formatSol, formatPercent, formatTokenAmount, formatMarketCap } from '../../ui/format.js'
 import './Widget.css'
 
 const BUY_PRESETS_SOL = [0.1, 0.25, 0.5, 1, 2, 5]
@@ -22,7 +22,7 @@ export function Widget({
   priceUsd,
   balanceSol = 0,
   solUsdPrice = 0,
-  marketCapText = '',
+  marketCapUsd = null,
   onBuyPreset,
   onSellPreset,
 }) {
@@ -60,7 +60,7 @@ export function Widget({
           <span class="axpt-widget-name">{name || symbol || (mint ? 'Unnamed token' : 'No token open')}</span>
           <span class="axpt-widget-sub mono">
             {mint ? formatPrice(livePrice) : 'Open a token to trade'}
-            {marketCapText ? ` · MC ${marketCapText}` : ''}
+            {marketCapUsd ? ` · MC ${formatMarketCap(marketCapUsd)}` : ''}
           </span>
         </div>
         <span class="axpt-widget-balance mono" title="Paper balance">

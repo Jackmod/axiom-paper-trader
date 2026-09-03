@@ -47,7 +47,9 @@ describe('Analytics', () => {
   // with no props would still mount a chart element in the first two tests.
   it('feeds its snapshots to whichever view is showing', () => {
     const { container } = render(<Analytics snapshots={DATED} />)
-    expect(container.querySelector('.axpt-trend-graph path')).toHaveAttribute('d', 'M 0 0 L 280 120')
+    // 280x120 box with an 8px inset band and a zero-spanning domain [-3, 2]:
+    //   y(2) = 112 - (5/5)*104 = 8,  y(-3) = 112 - (0/5)*104 = 112
+    expect(container.querySelector('.axpt-trend-graph path')).toHaveAttribute('d', 'M 0 8 L 280 112')
 
     fireEvent.click(screen.getByRole('button', { name: 'Calendar' }))
 
@@ -65,5 +67,16 @@ describe('Analytics', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Calendar' }))
 
     expect(screen.getByText(/not enough history yet for a calendar/i)).toBeInTheDocument()
+  })
+
+  // A blank box is indistinguishable from a crash. Whichever view a fresh user lands on
+  // has to tell them what it is waiting for, not just that it has nothing.
+  it('tells a fresh user what each empty view is waiting for', () => {
+    render(<Analytics snapshots={[]} />)
+    expect(screen.getByText(/0 of 2 readings/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }))
+
+    expect(screen.getByText(/within a minute/i)).toBeInTheDocument()
   })
 })

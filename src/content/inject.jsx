@@ -236,7 +236,7 @@ function App() {
       priceUsd={tokenInfo?.priceUsd ?? pageContext?.priceUsd}
       balanceSol={account.balanceSol}
       solUsdPrice={account.solUsdPrice}
-      marketCapText={pageContext?.marketCapText ?? ''}
+      marketCapUsd={tokenInfo?.marketCapUsd ?? null}
       onBuyPreset={handleBuyPreset}
       onSellPreset={handleSellPreset}
     />

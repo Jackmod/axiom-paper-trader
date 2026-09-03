@@ -71,7 +71,7 @@ describe('fetchPumpFunToken (the call PUMPFUN_API exists for)', () => {
     expect(fetch.mock.calls[0][0].startsWith(`${PUMPFUN_API}/`)).toBe(true)
   })
 
-  it('returns name, symbol and image for a bonding-curve coin v3 knows', async () => {
+  it('returns name, symbol, image and USD market cap for a bonding-curve coin v3 knows', async () => {
     fetch.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -79,6 +79,9 @@ describe('fetchPumpFunToken (the call PUMPFUN_API exists for)', () => {
         name: 'Fresh Coin',
         symbol: 'FRESH',
         image_uri: 'https://ipfs.io/ipfs/QmFresh/image.png',
+        // v3 quotes the curve's cap twice: market_cap in SOL, usd_market_cap in dollars.
+        market_cap: 48.37320459098604,
+        usd_market_cap: 5036.585904750017,
         complete: false,
       }),
     })
@@ -87,6 +90,7 @@ describe('fetchPumpFunToken (the call PUMPFUN_API exists for)', () => {
       name: 'Fresh Coin',
       symbol: 'FRESH',
       imageUrl: 'https://ipfs.io/ipfs/QmFresh/image.png',
+      marketCapUsd: 5036.585904750017,
     })
   })
 
@@ -134,6 +138,7 @@ describe('fetchPumpFunToken (the call PUMPFUN_API exists for)', () => {
         name: 'Fresh Coin',
         symbol: 'FRESH',
         imageUrl: null,
+        marketCapUsd: null,
       })
     }
   })

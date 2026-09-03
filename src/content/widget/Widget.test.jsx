@@ -117,21 +117,23 @@ describe('Widget header', () => {
     expect(screen.getByText('Open a token to trade')).toBeInTheDocument()
   })
 
-  it('appends the scraped market cap to the header price', () => {
+  // Market cap now comes from the price APIs as a NUMBER, not scraped text. The scraped
+  // version was brittle and in practice matched the token's PRICE instead of its cap.
+  it('appends the market cap, formatted with a magnitude suffix, to the header price', () => {
     render(
       <Widget
         position={POSITION}
         mint={MINT}
-        marketCapText="$450K"
+        marketCapUsd={450000}
         solUsdPrice={SOL_USD}
         onBuyPreset={noop}
         onSellPreset={noop}
       />,
     )
-    expect(screen.getByText('$0.00005000 · MC $450K')).toBeInTheDocument()
+    expect(screen.getByText('$0.00005000 · MC $450.0K')).toBeInTheDocument()
   })
 
-  it('omits the market cap entirely when the page did not provide one', () => {
+  it('omits the market cap entirely when no source reported one', () => {
     const { container } = render(
       <Widget position={POSITION} mint={MINT} solUsdPrice={SOL_USD} onBuyPreset={noop} onSellPreset={noop} />,
     )

@@ -263,14 +263,22 @@ describe('SidePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'History' }))
 
-    // t2: sold W for 1.5 SOL at $0.015 a token. SOL is the amount that moved through the
-    // account; the price is per token, and the two are no longer the same number.
-    await waitFor(() => expect(screen.getByText('1.500 SOL @ $0.0150')).toBeInTheDocument())
-    expect(screen.getAllByRole('listitem')).toHaveLength(4) // one row per logged trade, newest first
-    // t4, the newest: the losing close of L for 0.5 SOL at $0.005 a token.
-    const newest = screen.getAllByRole('listitem')[0]
-    expect(newest).toHaveTextContent('SELL')
-    expect(newest).toHaveTextContent('0.5000 SOL @ $0.005000')
+    // one row per logged trade, newest first
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(4))
+    const rows = screen.getAllByRole('listitem')
+
+    // t4, the newest: the losing close of L — 0.5 SOL back at $0.005 a token, the whole
+    // position closed, and the 0.5 SOL loss the sell recorded. SOL is the amount that moved
+    // through the account; the price is per token, and the two are not the same number.
+    expect(rows[0]).toHaveTextContent('SELL')
+    expect(rows[0]).toHaveTextContent('Received 0.5000 SOL')
+    expect(rows[0]).toHaveTextContent('Price $0.005000')
+    expect(rows[0]).toHaveTextContent('Realized -0.5000 SOL')
+    // t2: sold 10,000 W for 1.5 SOL at $0.015 a token, for a +0.5 SOL profit.
+    expect(rows[2]).toHaveTextContent('Received 1.500 SOL')
+    expect(rows[2]).toHaveTextContent('Sold 10.00K W')
+    expect(rows[2]).toHaveTextContent('Price $0.0150')
+    expect(rows[2]).toHaveTextContent('Realized +0.5000 SOL')
   })
 
   it('shows the History empty state on a fresh install, where tradeHistory is undefined', async () => {
@@ -293,7 +301,11 @@ describe('SidePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analytics' }))
 
     await waitFor(() => expect(container.querySelector('.axpt-trend-graph')).toBeInTheDocument())
-    expect(container.querySelector('.axpt-trend-graph path')).toHaveAttribute('d', 'M 0 120 L 140 0 L 280 60')
+    // The fixture PnLs are 0, 2, 1. The chart plots into a 280x120 box inset by 8px, so
+    // the band is y in [8, 112] (104 tall), over a domain that always contains zero:
+    //   min = 0, max = 2  ->  y(0) = 112, y(2) = 112 - (2/2)*104 = 8, y(1) = 112 - 52 = 60
+    // x steps across three points as 0, 140, 280.
+    expect(container.querySelector('.axpt-trend-graph path')).toHaveAttribute('d', 'M 0 112 L 140 8 L 280 60')
     expect(screen.queryByText('Ay')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Calendar' }))

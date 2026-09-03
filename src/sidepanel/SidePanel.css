@@ -95,10 +95,43 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+/* A history row is two lines: who/what/when, then the figures that answer
+   "how much did I pay, what did I get, and did I make money". */
 .axpt-history-row {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+.axpt-history-head {
+  display: flex;
+  align-items: baseline;
   gap: var(--space-2);
+}
+.axpt-history-side {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.axpt-history-symbol {
+  flex: 1;
+}
+.axpt-history-time {
+  font-size: 11px;
+}
+.axpt-history-cells {
+  display: flex;
   flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: 12px;
+}
+/* The label stays muted even inside a cell coloured by axpt-pnl-positive/negative,
+   so the eye lands on the number. */
+.axpt-history-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .axpt-analytics-toggle {

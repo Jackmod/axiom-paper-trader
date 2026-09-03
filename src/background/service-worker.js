@@ -26,6 +26,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         name: metadata?.name ?? '',
         symbol: metadata?.symbol ?? '',
         imageUrl: metadata?.imageUrl ?? '',
+        marketCapUsd: metadata?.marketCapUsd ?? null,
         priceUsd: price?.priceUsd ?? null,
       })
       return

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatPrice, formatTokenAmount, formatSol, formatPercent, formatUsd } from './format.js'
+import { formatPrice, formatTokenAmount, formatSol, formatPercent, formatUsd, formatMarketCap } from './format.js'
 
 describe('formatPrice', () => {
   it('keeps a sub-cent memecoin price legible instead of rounding it to zero', () => {
@@ -89,5 +89,22 @@ describe('formatUsd', () => {
 
   it('keeps small USD values from rounding away', () => {
     expect(formatUsd(0.0042)).toContain('42')
+  })
+})
+
+describe('formatMarketCap', () => {
+  it('uses the magnitude suffixes traders read at a glance', () => {
+    expect(formatMarketCap(280181522)).toBe('$280.18M')
+    expect(formatMarketCap(2376412712)).toBe('$2.38B')
+    expect(formatMarketCap(12100)).toBe('$12.1K')
+    expect(formatMarketCap(850)).toBe('$850')
+  })
+
+  it('reports an unknown cap honestly rather than as $0', () => {
+    // A real market cap is never zero, so a 0 means "the source did not know".
+    expect(formatMarketCap(0)).toBe('—')
+    expect(formatMarketCap(null)).toBe('—')
+    expect(formatMarketCap(undefined)).toBe('—')
+    expect(formatMarketCap(NaN)).toBe('—')
   })
 })

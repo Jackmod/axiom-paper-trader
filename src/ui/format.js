@@ -54,3 +54,16 @@ export function formatUsd(value, { signed = false } = {}) {
   const abs = Math.abs(value)
   return `${sign}$${abs >= 1 ? abs.toFixed(2) : abs.toPrecision(3)}`
 }
+
+/**
+ * Market cap, with the magnitude suffix traders read at a glance ("$280M").
+ * Takes a NUMBER from the price APIs — never scraped text, which was both brittle and
+ * frequently picked up the token's price instead of its cap.
+ */
+export function formatMarketCap(value) {
+  if (value === null || value === undefined || !Number.isFinite(value) || value <= 0) return '—'
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`
+  return `$${value.toFixed(0)}`
+}

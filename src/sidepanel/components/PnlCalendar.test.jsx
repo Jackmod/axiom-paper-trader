@@ -90,4 +90,53 @@ describe('PnlCalendar', () => {
     render(<PnlCalendar snapshots={[at('2026-09-01T10:00', 0.1)]} />)
     expect(alphaOf(0)).toBeLessThan(0.3)
   })
+
+  // The single most common "the calendar is broken" report: a new user's whole history
+  // is inside one day, so the grid correctly contains exactly one square and looks like
+  // a rendering failure. The view has to state the rule it is following.
+  it('explains that one square means one day of history, not a broken grid', () => {
+    render(<PnlCalendar snapshots={[at('2026-09-01T10:00', 1), at('2026-09-01T20:00', 2)]} />)
+    expect(document.querySelectorAll('.axpt-pnl-calendar-cell')).toHaveLength(1)
+    expect(screen.getByText(/1 day of history/i)).toBeInTheDocument()
+    expect(screen.getByText(/midnight/i)).toBeInTheDocument()
+  })
+
+  it('reports the day count once there is more than one day', () => {
+    render(<PnlCalendar snapshots={[at('2026-09-01T10:00', 1), at('2026-09-02T10:00', 2), at('2026-09-03T10:00', 3)]} />)
+    expect(screen.getByText(/3 days of history/i)).toBeInTheDocument()
+    // "the next cell appears after midnight" is only interesting while there is one cell.
+    expect(screen.queryByText(/midnight/i)).not.toBeInTheDocument()
+  })
+
+  // The empty state has to say what is missing and whether waiting fixes it, the same as
+  // the trend view — a bare "not enough history" reads as a fault.
+  it('says what the empty calendar is waiting for and roughly how long', () => {
+    render(<PnlCalendar snapshots={[]} />)
+    expect(screen.getByText(/not enough history/i)).toBeInTheDocument()
+    expect(screen.getByText(/within a minute/i)).toBeInTheDocument()
+  })
+
+  // A bare coloured square carries no information without a hover, which is unavailable
+  // to keyboard and screen-reader users and invisible in a screenshot.
+  it('prints the day of the month inside each cell', () => {
+    render(<PnlCalendar snapshots={[at('2026-09-01T10:00', 1), at('2026-09-02T10:00', 2)]} />)
+    const cells = [...document.querySelectorAll('.axpt-pnl-calendar-cell')]
+    expect(cells.map((c) => c.textContent.trim())).toEqual(['1', '2'])
+  })
+
+  // `undefined.toFixed(2)` throws, and a throw inside a cell takes the whole Analytics
+  // tab down — the loudest possible version of "the calendar isn't working".
+  it('renders the readable days when the history contains an unreadable reading', () => {
+    render(
+      <PnlCalendar
+        snapshots={[
+          at('2026-09-01T10:00', 3),
+          { timestamp: new Date('2026-09-02T10:00').getTime(), totalPnlSol: undefined },
+          at('2026-09-03T10:00', -1),
+        ]}
+      />,
+    )
+    const titles = [...document.querySelectorAll('.axpt-pnl-calendar-cell')].map((c) => c.getAttribute('title'))
+    expect(titles).toEqual(['2026-09-01: 3.00 SOL', '2026-09-03: -1.00 SOL'])
+  })
 })
