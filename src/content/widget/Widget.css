@@ -175,3 +175,15 @@
   gap: var(--space-1);
   font-size: 11px;
 }
+
+/* Identifies the panel at a glance, and marks unmistakably that trades here are simulated. */
+.axpt-brand {
+  flex-shrink: 0;
+  background: var(--color-buy);
+  color: var(--color-bg);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 5px;
+  border-radius: 4px;
+}

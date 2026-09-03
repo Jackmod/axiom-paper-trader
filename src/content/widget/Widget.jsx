@@ -51,6 +51,10 @@ export function Widget({
   return (
     <div class={`axpt-widget ${collapsed ? 'axpt-widget-collapsed' : ''}`}>
       <header class="axpt-widget-header">
+        {/* Says whose panel this is at a glance. The incumbent extension this replaces
+            floats in the same corner, and telling them apart from a screenshot was
+            costing real debugging time. */}
+        <span class="axpt-brand" title="Axiom Paper Trader — simulated trades only">PAPER</span>
         <TokenIcon imageUrl={imageUrl} symbol={symbol} name={name} mint={mint} size={22} />
         <div class="axpt-widget-title">
           <span class="axpt-widget-name">{name || symbol || (mint ? 'Unnamed token' : 'No token open')}</span>

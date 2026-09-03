@@ -216,8 +216,20 @@ function App() {
   )
 }
 
+// A loud, unmistakable boot marker. Diagnosing "is it even running?" by squinting at a
+// screenshot cost several rounds; now the answer is one line in the console and one
+// attribute in the DOM. If neither is present, the content script never ran — which
+// almost always means dist/ was not rebuilt, since Chrome's Reload button reloads the
+// built output, not the source.
+const BUILD = chrome.runtime.getManifest().version
+console.info(
+  `%c[Axiom Paper Trader] v${BUILD} loaded on ${location.pathname}`,
+  'background:#22c55e;color:#0a0e14;font-weight:700;padding:2px 6px;border-radius:4px',
+)
+
 const mountPoint = document.createElement('div')
 mountPoint.id = 'axiom-paper-trader-root'
+mountPoint.dataset.axptVersion = BUILD
 
 // Positioned inline, not via the stylesheet, so Axiom's own CSS cannot win against it.
 // Without this the widget was a plain block appended to <body>: a full-width banner that
