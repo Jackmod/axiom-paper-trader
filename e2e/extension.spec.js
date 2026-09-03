@@ -196,3 +196,35 @@ test('on a discovery feed it does NOT latch onto a coin from the list', async ()
 
   await context.close()
 })
+
+test('a position can be closed from the side panel, with no Axiom page in sight', async () => {
+  const { context, page } = await launch()
+  await page.goto(TOKEN_URL)
+  await expect(widget(page)).toBeVisible({ timeout: 15000 })
+
+  await page.fill('#amount', '0.25')
+  await page.locator('button.submit', { hasText: 'Buy DESI' }).click()
+  await expect(widget(page)).toContainText('Holding', { timeout: 15000 })
+
+  const extensionId = context.serviceWorkers()[0]?.url()?.split('/')[2]
+  test.skip(!extensionId, 'service worker not registered yet')
+
+  const panel = await context.newPage()
+  await panel.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`)
+
+  // Reported: leaving a coin's chart stranded the position — visible in the portfolio but
+  // closable only from the page it was opened on.
+  const sellAll = panel.getByRole('button', { name: /Sell 100% of/ })
+  await expect(sellAll).toBeVisible({ timeout: 15000 })
+
+  // The boot sweep must actually clear. It covers the whole panel while it plays, so one
+  // that never finishes is indistinguishable from a panel that renders nothing — and it
+  // is opaque, so it would hide every bug behind it.
+  await expect(panel.locator('.axpt-intro-overlay')).toHaveCount(0, { timeout: 5000 })
+  await panel.screenshot({ path: join(SHOTS, '06-side-panel-sell.png') })
+
+  await sellAll.click()
+  await expect(panel.locator('body')).toContainText(/No open positions/i, { timeout: 15000 })
+
+  await context.close()
+})

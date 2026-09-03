@@ -207,3 +207,19 @@
   100% { opacity: 0; }
 }
 .axpt-intro-overlay .axpt-boot-scan-line { width: 100%; }
+
+/* A position is closable from the portfolio list, not only from its Axiom page. */
+.axpt-position-row { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+.axpt-position-head { display: flex; align-items: center; gap: var(--space-3); }
+.axpt-position-sell { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+.axpt-position-sell .axpt-preset-btn {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-sell-bg);
+  color: var(--color-sell);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.axpt-position-sell .axpt-preset-btn:disabled { opacity: 0.5; cursor: not-allowed; }

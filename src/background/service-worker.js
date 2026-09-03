@@ -32,6 +32,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return
     }
 
+    // Sell from anywhere — the Side Panel, with no Axiom page in sight.
+    //
+    // A page-initiated sell carries the price the content script resolved, but the panel
+    // has no page and no token context. Rather than let the UI invent a price, the worker
+    // resolves the market price itself and then goes through exactly the same SELL path,
+    // so a sell closed from the portfolio list is identical to one closed from the chart.
+    if (message.type === 'SELL_AT_MARKET') {
+      const { mint, fraction } = message.payload
+      const price = await resolvePrice(mint)
+      if (!price?.priceUsd) {
+        sendResponse({ ok: false, error: 'No live price for this token right now — try again in a moment' })
+        return
+      }
+      const priced = { type: 'SELL', payload: { mint, fraction, priceUsd: price.priceUsd } }
+      const current = await getState()
+      const { nextState, response } = await handleMessage(priced, current)
+      await setState(nextState)
+      sendResponse(response)
+      return
+    }
+
     let state = await getState()
 
     // Trades convert between SOL and USD, so they need the SOL/USD rate — and on a fresh

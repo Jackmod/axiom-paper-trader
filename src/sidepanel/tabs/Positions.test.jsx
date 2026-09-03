@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/preact'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/preact'
 import { Positions } from './Positions.jsx'
 
 // Fixtures follow the units the engine actually stores:
@@ -303,5 +303,86 @@ describe('Positions', () => {
     expect(screen.getByText('1.100 SOL')).toBeInTheDocument()
     expect(screen.getByText('200.00 STALE @ $1.00')).toBeInTheDocument()
     expect(screen.getByText(/\+0\.1000 SOL \(\+10\.00%\)/)).toBeInTheDocument()
+  })
+})
+
+// Reported: "if i leave the chart for a coin i bought when i come back i can sell, or i
+// can sell on the side screen as well". Positions used to be display-only here, so a
+// position was strandable — visible in the portfolio but closable only from its own
+// Axiom page.
+describe('Positions — closing from the portfolio list', () => {
+  const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
+  const HELD = {
+    [MINT]: {
+      name: 'Justice For The Dolphin',
+      symbol: 'DOLPHIN',
+      imageUrl: '',
+      qty: 47_790_000,
+      avgEntryUsd: 0.00001087,
+      solInvested: 5,
+      lastPriceUsd: 0.00003,
+      stale: false,
+    },
+  }
+
+  beforeEach(() => {
+    globalThis.chrome = { runtime: { sendMessage: vi.fn() } }
+  })
+
+  it('offers 25/50/100% on every open position', () => {
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    for (const percent of [25, 50, 100]) {
+      expect(screen.getByRole('button', { name: `Sell ${percent}% of DOLPHIN` })).toBeInTheDocument()
+    }
+  })
+
+  it('closes at market rather than inventing a price of its own', () => {
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 50% of DOLPHIN' }))
+
+    // The panel has no page and no scraped price. It must ask the background to resolve
+    // the live one — a price guessed here is how a sell gets booked 120,000x wrong.
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: 'SELL_AT_MARKET', payload: { mint: MINT, fraction: 0.5 } },
+      expect.any(Function),
+    )
+  })
+
+  it('sends a fraction, not a token quantity, so the engine owns the maths', () => {
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 100% of DOLPHIN' }))
+
+    expect(chrome.runtime.sendMessage.mock.calls[0][0].payload.fraction).toBe(1)
+  })
+
+  it('surfaces a refused sell instead of leaving a button that did nothing', () => {
+    chrome.runtime.sendMessage = vi.fn((_msg, cb) => cb({ ok: false, error: 'No live price for this token right now' }))
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 25% of DOLPHIN' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no live price/i)
+  })
+
+  it('shows no error after a sell that succeeded', () => {
+    chrome.runtime.sendMessage = vi.fn((_msg, cb) => cb({ ok: true, realizedPnlSol: 1.5 }))
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 25% of DOLPHIN' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('blocks a second click while one sell is in flight, so a double-tap cannot double-sell', () => {
+    // The callback is never invoked, so the sell stays pending.
+    chrome.runtime.sendMessage = vi.fn()
+    render(<Positions positions={HELD} solUsdPrice={200} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 25% of DOLPHIN' }))
+
+    expect(screen.getByRole('button', { name: 'Sell 100% of DOLPHIN' })).toBeDisabled()
   })
 })
