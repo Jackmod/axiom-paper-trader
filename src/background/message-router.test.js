@@ -198,3 +198,15 @@ describe('SYNC_NOW', () => {
     expect(response.ok).toBe(true)
   })
 })
+
+describe('balance messages', () => {
+  it('TOP_UP, WITHDRAW, RESET_ACCOUNT route through to balance-actions', async () => {
+    let state = { ...DEFAULT_STATE, balanceSol: 1 }
+    state = (await handleMessage({ type: 'TOP_UP', payload: { solAmount: 2 } }, state)).nextState
+    expect(state.balanceSol).toBe(3)
+    state = (await handleMessage({ type: 'WITHDRAW', payload: { solAmount: 1 } }, state)).nextState
+    expect(state.balanceSol).toBe(2)
+    state = (await handleMessage({ type: 'RESET_ACCOUNT', payload: { startingBalanceSol: 10 } }, state)).nextState
+    expect(state.balanceSol).toBe(10)
+  })
+})

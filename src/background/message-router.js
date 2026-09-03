@@ -1,4 +1,5 @@
 import { applyBuy, applySell } from '../lib/position-engine.js'
+import { topUp, withdraw, resetAccount } from './balance-actions.js'
 
 export async function handleMessage(message, state) {
   if (message.type === 'BUY') {
@@ -67,6 +68,19 @@ export async function handleMessage(message, state) {
   if (message.type === 'SYNC_NOW') {
     return { nextState: state, response: { ok: true } } // service-worker.js does the actual refresh; the router just acknowledges
   }
+
+  if (message.type === 'TOP_UP') return { nextState: topUp(state, message.payload.solAmount), response: { ok: true } }
+
+  if (message.type === 'WITHDRAW') {
+    try {
+      return { nextState: withdraw(state, message.payload.solAmount), response: { ok: true } }
+    } catch (e) {
+      return { nextState: state, response: { ok: false, error: e.message } }
+    }
+  }
+
+  if (message.type === 'RESET_ACCOUNT')
+    return { nextState: resetAccount(state, message.payload.startingBalanceSol), response: { ok: true } }
 
   return { nextState: state, response: { ok: false, error: `Unknown message type: ${message.type}` } }
 }
