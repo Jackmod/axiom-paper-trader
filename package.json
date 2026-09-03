@@ -1,0 +1,37 @@
+{
+  "name": "axiom-paper-trading",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "format": "prettier --write ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.7.1",
+    "@preact/preset-vite": "^2.10.6",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/preact": "^3.2.4",
+    "eslint": "^7.32.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-preact": "^0.1.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.6",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}
