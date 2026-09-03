@@ -6,7 +6,10 @@ export async function fetchDexScreenerPrice(mint) {
     const pairs = body.pairs ?? []
     if (pairs.length === 0) return null
     const best = pairs.reduce((a, b) => ((b.liquidity?.usd ?? 0) > (a.liquidity?.usd ?? 0) ? b : a))
-    return Number(best.priceUsd)
+    const price = Number(best.priceUsd)
+    // A malformed/absent priceUsd yields NaN, and NaN would slip through the resolver's `!= null` guard
+    // and poison downstream PnL math — collapse it to null so the next source in the chain is tried.
+    return Number.isFinite(price) ? price : null
   } catch {
     return null
   }

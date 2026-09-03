@@ -15,7 +15,7 @@ export default defineManifest({
     'https://lite-api.jup.ag/*',
     'https://quote-api.jup.ag/*',
     'https://api.dexscreener.com/*',
-    'https://frontend-api-v2.pump.fun/*',
+    'https://frontend-api-v3.pump.fun/*',
     'wss://pumpportal.fun/*',
   ],
   content_scripts: [

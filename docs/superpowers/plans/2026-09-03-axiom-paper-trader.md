@@ -960,6 +960,16 @@ git commit -m "feat: Jupiter price API client"
 
 - Produces: `fetchDexScreenerPrice(mint) -> Promise<number|null>` and `fetchPumpFunPrice(mint) -> Promise<number|null>` — same contract shape as `fetchJupiterPrice` (Task 6) so the resolver (Task 8) can treat all three uniformly.
 
+> **VERIFIED 2026-09-03 (per the instruction at the end of Task 6) — DexScreener's drafted contract is correct; pump.fun's is wrong on both host and field.** Live requests:
+>
+> - **DexScreener — confirmed as drafted.** `GET https://api.dexscreener.com/latest/dex/tokens/<mint>` returns HTTP 200 with `{ schemaVersion, pairs: [...] }`, `priceUsd` a **string**, and `liquidity: { usd, base, quote }`. The highest-liquidity reduce below is right.
+> - **pump.fun — `frontend-api-v2.pump.fun` is dead** (HTTP 503 from nginx, with or without a browser UA; `frontend-api.pump.fun` returns Cloudflare 530). The live host is **`https://frontend-api-v3.pump.fun/coins/<mint>`** (HTTP 200; unknown mints return a clean **404**, so the `!res.ok` guard covers the not-found path).
+> - **There is no `price_usd` field — and never was.** The v3 coin document exposes `usd_market_cap`, `market_cap_usd`, `total_supply`, `total_supply_str`, `base_decimals`, `market_cap` (quoted in SOL), `real_sol_reserves` — but no USD price. A USD price must be **derived**: `usd_market_cap / (total_supply_str / 10 ** base_decimals)`. Note `virtual_sol_reserves`/`virtual_token_reserves` are **not** present on the v3 document, so a bonding-curve reserve-ratio derivation is not available here.
+> - **The derivation was validated against DexScreener** on five live mints (both `complete: true` graduated coins and a `complete: false` bonding-curve coin): derived/DexScreener ratios ranged 0.96–1.01, e.g. RAY derived $0.8157 vs DexScreener $0.8162.
+> - `manifest.config.js` `host_permissions` must list `https://frontend-api-v3.pump.fun/*` (the v2 entry was replaced).
+>
+> Step 1's pump.fun fixtures and Step 3's pump.fun implementation below have been updated to this shape. **Task 8's resolver must still verify its own assumptions rather than trusting drafted code** — and note that `Number(...)` on an absent/malformed price field yields `NaN`, which passes a `!= null` guard; both clients below therefore collapse a non-finite result to `null` so the fallback chain continues correctly.
+
 - [ ] **Step 1: Write the failing tests**
 
 ```js
@@ -982,7 +992,28 @@ describe('fetchDexScreenerPrice', () => {
         ],
       }),
     })
-    expect(await fetchDexScreenerPrice('M')).toBeCloseTo(0.0012)
+    const price = await fetchDexScreenerPrice('M')
+    expect(typeof price).toBe('number') // DexScreener ships priceUsd as a string; it must be converted
+    expect(price).toBe(0.0012)
+  })
+
+  it('picks the highest-liquidity pair when it is first in the list, not merely the last one', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        pairs: [
+          { priceUsd: '0.9', liquidity: { usd: 90000 } },
+          { priceUsd: '0.2', liquidity: { usd: 10 } },
+        ],
+      }),
+    })
+    expect(await fetchDexScreenerPrice('M')).toBe(0.9)
+  })
+
+  it('requests the token endpoint for the given mint', async () => {
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ pairs: [] }) })
+    await fetchDexScreenerPrice('M')
+    expect(fetch).toHaveBeenCalledWith('https://api.dexscreener.com/latest/dex/tokens/M')
   })
 
   it('returns null when there are no pairs', async () => {
@@ -1015,13 +1046,23 @@ describe('fetchDexScreenerPrice', () => {
         ],
       }),
     })
-    expect(await fetchDexScreenerPrice('M')).toBeCloseTo(0.7)
+    expect(await fetchDexScreenerPrice('M')).toBe(0.7)
+  })
+
+  it('returns null rather than NaN when the winning pair has no usable priceUsd', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ pairs: [{ priceUsd: undefined, liquidity: { usd: 50000 } }] }),
+    })
+    expect(await fetchDexScreenerPrice('M')).toBeNull()
   })
 })
 ```
 
+Cases: the happy path (derived from a real captured v3 payload), the endpoint/mint actually requested, decimal scaling, the `base_decimals`/`market_cap_usd`/`total_supply` fallbacks, non-ok, network error, invalid JSON, absent market cap, non-numeric market cap, absent supply, and zero supply (must be `null`, not `Infinity`). See `src/lib/price-sources/pumpfun.test.js` for the committed suite.
+
 ```js
-// src/lib/price-sources/pumpfun.test.js
+// src/lib/price-sources/pumpfun.test.js (happy path — the rest follow the same shape)
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fetchPumpFunPrice } from './pumpfun.js'
 
@@ -1029,28 +1070,38 @@ beforeEach(() => {
   globalThis.fetch = vi.fn()
 })
 
+// Trimmed from a real frontend-api-v3.pump.fun/coins/<mint> response captured 2026-09-03.
+const liveCoin = (overrides = {}) => ({
+  mint: 'M',
+  name: 'Test Coin',
+  symbol: 'TEST',
+  complete: false,
+  base_decimals: 6,
+  total_supply: 1000000000000000,
+  total_supply_str: '1000000000000000',
+  market_cap: 210.5,
+  market_cap_usd: 45000,
+  usd_market_cap: 45000,
+  ...overrides,
+})
+
 describe('fetchPumpFunPrice', () => {
-  it('returns the USD price for a bonding-curve token', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ usd_market_cap: 45000, price_usd: '0.0000045' }) })
-    expect(await fetchPumpFunPrice('M')).toBeCloseTo(0.0000045)
+  it('derives the USD price from market cap and circulating supply for a bonding-curve token', async () => {
+    fetch.mockResolvedValue({ ok: true, json: async () => liveCoin() })
+    const price = await fetchPumpFunPrice('M')
+    expect(typeof price).toBe('number')
+    expect(price).toBeCloseTo(0.000045, 12) // 45000 USD market cap / 1e9 tokens
   })
 
-  it('returns null on a non-ok response (token graduated or not found)', async () => {
-    fetch.mockResolvedValue({ ok: false })
-    expect(await fetchPumpFunPrice('M')).toBeNull()
-  })
-
-  it('returns null (not a rejected promise) on a network error', async () => {
-    fetch.mockRejectedValue(new TypeError('Failed to fetch'))
-    await expect(fetchPumpFunPrice('M')).resolves.toBeNull()
-  })
-
-  it('returns null when price_usd is absent from the response body', async () => {
-    fetch.mockResolvedValue({ ok: true, json: async () => ({ usd_market_cap: 100 }) })
-    expect(await fetchPumpFunPrice('M')).toBeNull()
+  it('requests the v3 coins endpoint for the given mint', async () => {
+    fetch.mockResolvedValue({ ok: true, json: async () => liveCoin() })
+    await fetchPumpFunPrice('M')
+    expect(fetch).toHaveBeenCalledWith('https://frontend-api-v3.pump.fun/coins/M')
   })
 })
 ```
+
+> **Assertion sensitivity — do not use a bare `toBeCloseTo` here.** Vitest's `toBeCloseTo` has no numeric type guard: it coerces the actual value, so with the default precision of 2 a `null` return (coerced to `0`) *passes* `toBeCloseTo(0.0000045)`, and a string `'0.0012'` passes `toBeCloseTo(0.0012)`. A suite written that way stays green against a stub that returns `null` forever. Use `toBe` for exactly-representable values, and `typeof price === 'number'` plus a high explicit precision (e.g. `toBeCloseTo(x, 12)`) for derived ones.
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
@@ -1069,7 +1120,10 @@ export async function fetchDexScreenerPrice(mint) {
     const pairs = body.pairs ?? []
     if (pairs.length === 0) return null
     const best = pairs.reduce((a, b) => ((b.liquidity?.usd ?? 0) > (a.liquidity?.usd ?? 0) ? b : a))
-    return Number(best.priceUsd)
+    const price = Number(best.priceUsd)
+    // A malformed/absent priceUsd yields NaN, and NaN would slip through the resolver's `!= null` guard
+    // and poison downstream PnL math — collapse it to null so the next source in the chain is tried.
+    return Number.isFinite(price) ? price : null
   } catch {
     return null
   }
@@ -1078,12 +1132,23 @@ export async function fetchDexScreenerPrice(mint) {
 
 ```js
 // src/lib/price-sources/pumpfun.js
+// pump.fun exposes no USD price field, so the price is derived from market cap / circulating supply.
+const PUMPFUN_COINS_ENDPOINT = 'https://frontend-api-v3.pump.fun/coins'
+const PUMPFUN_DEFAULT_DECIMALS = 6
+
 export async function fetchPumpFunPrice(mint) {
   try {
-    const res = await fetch(`https://frontend-api-v2.pump.fun/coins/${mint}`)
-    if (!res.ok) return null
+    const res = await fetch(`${PUMPFUN_COINS_ENDPOINT}/${mint}`)
+    if (!res.ok) return null // 404 = unknown mint, 5xx = API down — both mean "no price from this tier"
     const body = await res.json()
-    return body.price_usd != null ? Number(body.price_usd) : null
+    const marketCapUsd = Number(body?.usd_market_cap ?? body?.market_cap_usd)
+    const decimals = Number(body?.base_decimals ?? PUMPFUN_DEFAULT_DECIMALS)
+    const rawSupply = Number(body?.total_supply_str ?? body?.total_supply)
+    if (!Number.isFinite(marketCapUsd) || !Number.isFinite(rawSupply) || !Number.isFinite(decimals)) return null
+    const supply = rawSupply / 10 ** decimals
+    if (supply <= 0) return null
+    const price = marketCapUsd / supply
+    return Number.isFinite(price) ? price : null
   } catch {
     return null
   }
@@ -1093,12 +1158,12 @@ export async function fetchPumpFunPrice(mint) {
 - [ ] **Step 4: Run the tests and verify they pass**
 
 Run: `npm test -- dexscreener pumpfun`
-Expected: PASS (10 tests total).
+Expected: PASS (24 tests total — 11 DexScreener, 13 pump.fun).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/price-sources/dexscreener.js src/lib/price-sources/pumpfun.js src/lib/price-sources/dexscreener.test.js src/lib/price-sources/pumpfun.test.js
+git add src/lib/price-sources/dexscreener.js src/lib/price-sources/pumpfun.js src/lib/price-sources/dexscreener.test.js src/lib/price-sources/pumpfun.test.js manifest.config.js
 git commit -m "feat: DexScreener and pump.fun fallback price clients"
 ```
 
