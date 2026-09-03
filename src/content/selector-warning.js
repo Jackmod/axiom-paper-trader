@@ -1,4 +1,4 @@
-import { findBuyButton } from './dom-scraper.js'
+import { canIntercept } from './dom-scraper.js'
 
 export const WARNING_ID = 'axpt-interception-warning'
 
@@ -11,7 +11,7 @@ const MESSAGE =
 // clicking Buy, and having nothing recorded (or worse, the real trade going through
 // because interception never attached).
 export function checkInterceptionHealth() {
-  const healthy = Boolean(findBuyButton())
+  const healthy = canIntercept()
 
   if (healthy) {
     dismissInterceptionWarning()

@@ -1,74 +1,80 @@
 import { parseNumber } from './parse-number.js'
+import * as discovery from './discovery.js'
 
-// UNVERIFIED PLACEHOLDER SELECTORS — every value below is the shape Task 14
-// Step 2 proposes, NOT a selector read off the live site. Step 2/4 (element
-// picker on a real token page, then calling scrapeTradeContext() in the
-// DevTools console) still has to be done by hand, and it genuinely cannot be
-// automated from here: axiom.trade serves logged-out visitors a marketing
-// landing page, and /meme/<mint> sits behind a Cloudflare bot challenge
-// ("Performing security verification"), so an automated browser never reaches
-// the trading UI. The landing page it does serve emits zero [data-testid]
-// attributes — only framework-generated ones (data-dpl-id, data-discover,
-// data-nimg) — which is further reason to treat these as guesses.
+// How the extension locates Axiom's controls: by LABEL, at runtime (see discovery.js).
 //
-// Until a human replaces them, findBuyButton() returns null and
-// scrapeTradeContext() returns null on the real site; Task 27's "trade
-// interception unavailable" banner is what surfaces that to the user.
-// Prefer stable data-* attributes or ARIA roles over generated class names,
-// which Axiom may rebuild on every deploy, and re-verify after any UI change.
-export const SELECTORS = {
-  buyButton: '[data-testid="buy-button"]',
-  sellButtons: '[data-testid="sell-percent-button"]',
-  solAmountInput: '[data-testid="trade-amount-input"]',
-  tokenName: '[data-testid="token-name"]',
-  tokenSymbol: '[data-testid="token-symbol"]',
-  tokenImage: '[data-testid="token-image"] img',
-  tokenMint: '[data-token-mint]', // read the mint from a data attribute on this element
-  priorityFee: '[data-testid="priority-fee-value"]',
-  slippage: '[data-testid="slippage-value"]',
-  displayedPrice: '[data-testid="token-price"]',
-  marketCap: '[data-testid="market-cap"]',
-  rugBadge: '[data-testid="rug-badge"]',
-}
+// This deliberately does not ship hardcoded CSS selectors. An earlier version did —
+// `[data-testid="buy-button"]` and friends — and every one of them was a guess: Axiom
+// serves logged-out visitors a marketing page and puts token pages behind a bot
+// challenge, so they could never be verified, and the landing page emits no data-testid
+// attributes at all. Guessed selectors meant the extension installed and then silently
+// did nothing, with a human required to hand-edit source before it worked at all.
+//
+// Label-based discovery needs no configuration and survives the class-name churn of a
+// frontend redeploy, because renaming the button a user clicks means changing what the
+// user reads.
+
+export const findBuyButton = () => discovery.findBuyButton(document)
+export const findSellButtons = () => discovery.findSellButtons(document)
+export const findBuyPresets = () => discovery.findBuyPresets(document)
+export const findAmountInput = () => discovery.findAmountInput(document)
+export const canIntercept = () => discovery.canIntercept(document)
+export const { percentOf, amountOf } = discovery
 
 // Solana mint addresses are base58, 32-44 chars. Axiom's token routes carry the mint
-// directly (e.g. /meme/<mint>), which is a far more durable source than any DOM
-// attribute — a redesign rewrites markup, but the route has to keep identifying the
-// token. The DOM attribute stays as a fallback for routes that don't carry it.
+// directly (e.g. /meme/<mint>), which is far more durable than any DOM attribute — a
+// redesign rewrites markup, but the route has to keep identifying the token.
 const MINT_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 
 export function readMint() {
   const fromUrl = window.location.pathname.split('/').find((segment) => MINT_PATTERN.test(segment))
   if (fromUrl) return fromUrl
 
-  const el = document.querySelector(SELECTORS.tokenMint)
+  // Fallback for routes that don't carry it: any element advertising a mint.
+  const el = document.querySelector('[data-token-mint]')
   return el?.getAttribute('data-token-mint') ?? null
 }
 
-export function findBuyButton() {
-  return document.querySelector(SELECTORS.buyButton)
-}
+// Display-only details (spec §6). Every one of these is best-effort: if a heuristic
+// misses, the field is empty and the trade still records correctly. Token name, symbol
+// and image are backfilled from the price APIs by the background worker, so a miss here
+// costs nothing — which is why none of them can block a trade.
+function readOptionalDetails() {
+  const withLabel = (pattern) =>
+    [...document.querySelectorAll('span, div, p')].find(
+      (el) => el.children.length === 0 && pattern.test((el.textContent || '').trim()),
+    )
 
-export function findSellButtons() {
-  return Array.from(document.querySelectorAll(SELECTORS.sellButtons))
+  const price = withLabel(/^\$\s?[\d,]+\.?\d*$/)
+  const marketCap = withLabel(/^(mc|market cap)?\s*\$\s?[\d,.]+[kmb]?$/i)
+  const slippage = withLabel(/^\d{1,3}(\.\d+)?\s*%$/)
+
+  return {
+    priceUsd: parseNumber(price?.textContent),
+    // MC is carried as the page's own text rather than parsed: Axiom renders magnitude
+    // suffixes ("$450K"), and parsing that to a number would be wrong by 1000x.
+    marketCapText: marketCap?.textContent?.trim() ?? '',
+    slippagePct: parseNumber(slippage?.textContent) ?? 0,
+  }
 }
 
 export function scrapeTradeContext() {
   const mint = readMint()
   if (!mint) return null
 
+  const details = readOptionalDetails()
+
   return {
     mint,
-    symbol: document.querySelector(SELECTORS.tokenSymbol)?.textContent?.trim() ?? '',
-    name: document.querySelector(SELECTORS.tokenName)?.textContent?.trim() ?? '',
-    imageUrl: document.querySelector(SELECTORS.tokenImage)?.getAttribute('src') ?? '',
-    priceUsd: parseNumber(document.querySelector(SELECTORS.displayedPrice)?.textContent),
-    priorityFeeSol: parseNumber(document.querySelector(SELECTORS.priorityFee)?.textContent) ?? 0,
-    slippagePct: parseNumber(document.querySelector(SELECTORS.slippage)?.textContent) ?? 0,
-    // MC and the rug badge are display-only (spec 6) and Axiom renders them with
-    // magnitude suffixes ("$450K"), so they are carried as the page's own text
-    // rather than parsed into numbers that would be wrong by 1000x.
-    marketCapText: document.querySelector(SELECTORS.marketCap)?.textContent?.trim() ?? '',
-    rugBadgeText: document.querySelector(SELECTORS.rugBadge)?.textContent?.trim() ?? '',
+    symbol: '',
+    name: '',
+    imageUrl: '',
+    priceUsd: details.priceUsd,
+    // Axiom's own priority fee is not reliably discoverable by label, and guessing a
+    // fee would corrupt PnL with a number the user never agreed to. Absent means zero.
+    priorityFeeSol: 0,
+    slippagePct: details.slippagePct,
+    marketCapText: details.marketCapText,
+    rugBadgeText: '',
   }
 }

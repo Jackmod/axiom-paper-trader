@@ -1,5 +1,12 @@
-import { findBuyButton, findSellButtons, scrapeTradeContext, SELECTORS } from './dom-scraper.js'
-import { parseNumber } from './parse-number.js'
+import {
+  findBuyButton,
+  findSellButtons,
+  findBuyPresets,
+  findAmountInput,
+  scrapeTradeContext,
+  percentOf,
+  amountOf,
+} from './dom-scraper.js'
 import { fetchQuotedFillPrice } from '../lib/price-sources/jupiter-quote.js'
 import { SOL_MINT } from '../lib/price-sources/jupiter.js'
 
@@ -18,19 +25,25 @@ export async function resolveFillPrice(context, qtySol) {
 }
 
 function readSolAmount() {
-  const input = document.querySelector(SELECTORS.solAmountInput)
+  const input = findAmountInput()
   return Number(input?.value ?? 0)
 }
 
-// Axiom's sell buttons carry their percentage as label text ("25%", "50%", "100%"),
-// which is what SELECTORS.sellButtons matches and what the DOM fixtures model. An
-// earlier version read a `data-sell-percent` attribute that exists nowhere in Axiom's
-// markup, so every intercepted sell resolved to 0% and closed nothing. The attribute
-// is still honoured first in case Axiom ever adds one, but the label is the real source.
-function readSellPercent(button) {
-  const fromAttribute = parseNumber(button.getAttribute('data-sell-percent'))
-  if (fromAttribute !== null) return fromAttribute
-  return parseNumber(button.textContent)
+// Which control did this click land on? Axiom supports two shapes and we must handle
+// both: one-click SOL presets (the amount is the button's own label) and an explicit
+// Buy button (the amount is in the adjacent field).
+function classifyClick(event) {
+  const hits = (el) => el && (event.target === el || el.contains(event.target))
+
+  const preset = findBuyPresets().find(hits)
+  if (preset) return { kind: 'buy', qtySol: amountOf(preset) }
+
+  if (hits(findBuyButton())) return { kind: 'buy', qtySol: readSolAmount() }
+
+  const sell = findSellButtons().find(hits)
+  if (sell) return { kind: 'sell', sellPercent: percentOf(sell) }
+
+  return null
 }
 
 // Returns a detach handle. Interception is conditional on the paper-mode setting
@@ -39,30 +52,26 @@ function readSellPercent(button) {
 // real Buy clicks for the lifetime of the page.
 export function attachTradeInterception(onTradeConfirmed) {
   const onClick = async (event) => {
-    const buyButton = findBuyButton()
-    const sellButtons = findSellButtons()
+    const hit = classifyClick(event)
+    if (!hit) return // not a trading control — leave the page alone
 
-    if (buyButton && (event.target === buyButton || buyButton.contains(event.target))) {
-      event.preventDefault()
-      event.stopPropagation()
-      const context = scrapeTradeContext()
-      if (!context) return
-      const qtySol = readSolAmount()
-      const priceUsd = await resolveFillPrice(context, qtySol)
-      onTradeConfirmed({ side: 'buy', ...context, qtySol, priceUsd })
+    // Swallow the click BEFORE anything async, so Axiom's own handler never runs and no
+    // real transaction is ever built. This is the zero-real-transactions guarantee.
+    event.preventDefault()
+    event.stopPropagation()
+
+    const context = scrapeTradeContext()
+    if (!context) return
+
+    if (hit.kind === 'buy') {
+      if (!hit.qtySol || hit.qtySol <= 0) return // no readable amount — better nothing than a phantom trade
+      const priceUsd = await resolveFillPrice(context, hit.qtySol)
+      onTradeConfirmed({ side: 'buy', ...context, qtySol: hit.qtySol, priceUsd })
       return
     }
 
-    const clickedSell = sellButtons.find((btn) => event.target === btn || btn.contains(event.target))
-    if (clickedSell) {
-      event.preventDefault()
-      event.stopPropagation()
-      const context = scrapeTradeContext()
-      if (!context) return
-      const percent = readSellPercent(clickedSell)
-      if (percent === null) return // unreadable percentage — drop the trade rather than silently selling 0%
-      onTradeConfirmed({ side: 'sell', ...context, sellPercent: percent, priceUsd: context.priceUsd })
-    }
+    if (!hit.sellPercent) return // unreadable percentage — never a silent 0% sell
+    onTradeConfirmed({ side: 'sell', ...context, sellPercent: hit.sellPercent, priceUsd: context.priceUsd })
   }
 
   document.addEventListener('click', onClick, { capture: true })

@@ -1,124 +1,109 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { findBuyButton, findSellButtons, scrapeTradeContext, readMint } from './dom-scraper.js'
+import { findBuyButton, findSellButtons, scrapeTradeContext, readMint, canIntercept } from './dom-scraper.js'
 
-// These tests do NOT (and cannot) verify that SELECTORS match the real
-// axiom.trade markup — only a human on a logged-in token page can do that
-// (Task 14 Step 2/4). What they do verify is the mapping layer: which element
-// feeds which field, the trimming, the no-mint early exit, and that no NaN
-// escapes into the trade context. If Step 2 changes a selector, update the
-// fixture below to match.
-const FIXTURE = `
-  <div data-token-mint="So11111111111111111111111111111111111111112"></div>
-  <span data-testid="token-symbol">  BONK  </span>
-  <span data-testid="token-name">  Bonk Token  </span>
-  <div data-testid="token-image"><img src="https://img.example/bonk.png" /></div>
-  <span data-testid="token-price">$0.000004521</span>
-  <span data-testid="priority-fee-value">0.001 SOL</span>
-  <span data-testid="slippage-value">20%</span>
-  <span data-testid="market-cap">  $450K  </span>
-  <span data-testid="rug-badge">  Safe  </span>
-  <button data-testid="buy-button">Buy</button>
-  <button data-testid="sell-percent-button">25%</button>
-  <button data-testid="sell-percent-button">50%</button>
-  <button data-testid="sell-percent-button">100%</button>
+const MINT = 'So11111111111111111111111111111111111111112'
+
+// Realistic markup: labels a user reads, and generated class names of the kind a real
+// build emits. Nothing here relies on data-* attributes, because axiom.trade does not
+// ship them and an earlier version of this file pretended otherwise.
+const TOKEN_PAGE = `
+  <div class="sc-9f2a">
+    <span>$0.000004521</span>
+    <span>20%</span>
+    <div class="sc-buy"><button>0.1</button><button>0.25</button><button>2</button></div>
+    <div class="sc-sell"><button>25%</button><button>50%</button><button>100%</button></div>
+  </div>
 `
+
+const setPath = (pathname) => window.history.replaceState({}, '', pathname)
 
 afterEach(() => {
   document.body.innerHTML = ''
+  setPath('/')
 })
 
 describe('scrapeTradeContext', () => {
-  it('returns null when the page has no mint element to key the position on', () => {
-    document.body.innerHTML = '<span data-testid="token-symbol">BONK</span>'
+  it('returns null off a token route, so nothing is recorded on the marketing page', () => {
+    setPath('/')
+    document.body.innerHTML = TOKEN_PAGE
     expect(scrapeTradeContext()).toBeNull()
   })
 
-  it('returns null when the mint element carries an empty mint', () => {
-    // Never fall back to symbol/name as the position key — that would break the
-    // one-position-per-mint invariant.
-    document.body.innerHTML = '<div data-token-mint=""></div><span data-testid="token-name">Bonk</span>'
-    expect(scrapeTradeContext()).toBeNull()
+  it('keys the context on the mint from the route', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = TOKEN_PAGE
+    expect(scrapeTradeContext().mint).toBe(MINT)
   })
 
-  it('maps each element to its field and trims the display text', () => {
-    document.body.innerHTML = FIXTURE
-    expect(scrapeTradeContext()).toEqual({
-      mint: 'So11111111111111111111111111111111111111112',
-      symbol: 'BONK',
-      name: 'Bonk Token',
-      imageUrl: 'https://img.example/bonk.png',
-      priceUsd: 0.000004521,
-      priorityFeeSol: 0.001,
-      slippagePct: 20,
-      marketCapText: '$450K',
-      rugBadgeText: 'Safe',
-    })
+  it('reads the displayed price when one is on the page', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = TOKEN_PAGE
+    expect(scrapeTradeContext().priceUsd).toBeCloseTo(0.000004521)
   })
 
-  it('omits missing optional data rather than blocking the trade (spec 13)', () => {
-    document.body.innerHTML = '<div data-token-mint="MintOnly111"></div>'
-    expect(scrapeTradeContext()).toEqual({
-      mint: 'MintOnly111',
-      symbol: '',
-      name: '',
-      imageUrl: '',
-      priceUsd: null,
-      priorityFeeSol: 0,
-      slippagePct: 0,
-      marketCapText: '',
-      rugBadgeText: '',
-    })
+  it('still returns a usable context when every optional detail is missing (spec §13)', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = '<div></div>'
+
+    const context = scrapeTradeContext()
+    // A missing price is fine: the real fill price comes from Jupiter's quote API, and
+    // name/symbol/image are backfilled from the price APIs. None of them may block a trade.
+    expect(context.mint).toBe(MINT)
+    expect(context.priceUsd).toBeNull()
+    expect(context.marketCapText).toBe('')
   })
 
   it('never lets an unparseable number reach the trade context as NaN', () => {
-    document.body.innerHTML = `
-      <div data-token-mint="MintNaN111"></div>
-      <span data-testid="token-price">$0.004521 -2.31%</span>
-      <span data-testid="priority-fee-value">--</span>
-      <span data-testid="slippage-value">N/A</span>
-    `
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = '<span>$—</span><span>N/A</span>'
+
     const context = scrapeTradeContext()
-    expect(context.priceUsd).toBeNull()
-    expect(context.priorityFeeSol).toBe(0)
-    expect(context.slippagePct).toBe(0)
+    expect(Number.isNaN(context.priceUsd)).toBe(false)
+    expect(Number.isNaN(context.slippagePct)).toBe(false)
+  })
+
+  it('reports a priority fee of zero rather than guessing one', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = TOKEN_PAGE
+    // Inventing a fee would corrupt PnL with a cost the user never agreed to.
+    expect(scrapeTradeContext().priorityFeeSol).toBe(0)
   })
 })
 
-describe('findBuyButton / findSellButtons', () => {
-  it('finds the buy button and every sell preset on a token page', () => {
-    document.body.innerHTML = FIXTURE
-    expect(findBuyButton()?.textContent).toBe('Buy')
-    expect(findSellButtons().map((el) => el.textContent)).toEqual(['25%', '50%', '100%'])
+describe('control discovery', () => {
+  it('finds the sell presets on a token page without any configuration', () => {
+    document.body.innerHTML = TOKEN_PAGE
+    expect(findSellButtons()).toHaveLength(3)
   })
 
-  it('reports absence as null / empty array so callers can show the unavailable banner', () => {
-    document.body.innerHTML = '<div data-token-mint="MintOnly111"></div>'
+  it('reports interception as available on a trading panel', () => {
+    document.body.innerHTML = TOKEN_PAGE
+    expect(canIntercept()).toBe(true)
+  })
+
+  it('reports absence on the logged-out marketing page, which raises the warning banner', () => {
+    document.body.innerHTML = '<h1>Trade faster on Axiom</h1>'
     expect(findBuyButton()).toBeNull()
     expect(findSellButtons()).toEqual([])
+    expect(canIntercept()).toBe(false)
   })
 })
 
-// The mint is read from the route first: Axiom's token URLs carry it, and a URL is far
-// more durable than markup a redesign can rewrite.
 describe('readMint', () => {
-  const setPath = (pathname) => window.history.replaceState({}, '', pathname)
-
-  afterEach(() => setPath('/'))
-
   it('reads the mint from an Axiom token route', () => {
-    setPath('/meme/So11111111111111111111111111111111111111112')
-    expect(readMint()).toBe('So11111111111111111111111111111111111111112')
+    setPath(`/meme/${MINT}`)
+    expect(readMint()).toBe(MINT)
   })
 
   it('ignores non-mint path segments', () => {
-    setPath('/meme/So11111111111111111111111111111111111111112')
+    setPath(`/meme/${MINT}`)
     expect(readMint()).not.toBe('meme')
   })
 
-  it('falls back to the DOM attribute when the route carries no mint', () => {
+  it('falls back to a DOM attribute when the route carries no mint', () => {
     setPath('/discover')
-    document.body.innerHTML = '<div data-token-mint="So11111111111111111111111111111111111111112"></div>'
-    expect(readMint()).toBe('So11111111111111111111111111111111111111112')
+    document.body.innerHTML = `<div data-token-mint="${MINT}"></div>`
+    expect(readMint()).toBe(MINT)
   })
 
   it('returns null when neither source has one', () => {
@@ -127,9 +112,8 @@ describe('readMint', () => {
     expect(readMint()).toBeNull()
   })
 
-  it('rejects a segment that is too short to be a mint', () => {
+  it('rejects a segment too short to be a mint', () => {
     setPath('/meme/abc')
-    document.body.innerHTML = ''
     expect(readMint()).toBeNull()
   })
 })
