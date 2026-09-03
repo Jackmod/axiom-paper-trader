@@ -1,0 +1,67 @@
+/* src/content/widget/Widget.css */
+.axpt-widget {
+  font-family: var(--font-ui);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.axpt-widget-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.axpt-token-image {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+.axpt-pnl-positive {
+  color: var(--color-buy);
+}
+.axpt-pnl-negative {
+  color: var(--color-sell);
+}
+
+.axpt-buy-row,
+.axpt-sell-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.axpt-preset-btn {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+.axpt-preset-btn:hover {
+  transform: translateY(-1px);
+}
+
+.axpt-buy-btn {
+  background: var(--color-buy-bg);
+  color: var(--color-buy);
+}
+.axpt-buy-btn:hover {
+  background: var(--color-buy);
+  color: var(--color-bg);
+}
+
+.axpt-sell-btn {
+  background: var(--color-sell-bg);
+  color: var(--color-sell);
+}
+.axpt-sell-btn:hover {
+  background: var(--color-sell);
+  color: var(--color-bg);
+}
