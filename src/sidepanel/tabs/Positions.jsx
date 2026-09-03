@@ -17,10 +17,15 @@ export function Positions({ positions }) {
                 {p.qty.toFixed(4)} {p.symbol}
               </span>
             </div>
-            <div class={`mono ${pnlUsd >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-              {pnlUsd >= 0 ? '+' : ''}
-              {pnlUsd.toFixed(2)} ({pnlPct.toFixed(1)}%)
-              {p.stale && <span class="axpt-stale-dot" title="Price may be stale" />}
+            <div class="axpt-position-figures">
+              {/* Spec §11 rows are (icon, name, qty, USD value, PnL) — the held
+                  value is what the position is worth now, not what it has made. */}
+              <div class="mono axpt-position-value">${(p.qty * p.lastPriceUsd).toFixed(2)}</div>
+              <div class={`mono ${pnlUsd >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
+                {pnlUsd >= 0 ? '+' : ''}
+                {pnlUsd.toFixed(2)} ({pnlPct.toFixed(1)}%)
+                {p.stale && <span class="axpt-stale-dot" title="Price may be stale" />}
+              </div>
             </div>
           </li>
         )

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { Positions } from './tabs/Positions.jsx'
+import { getPortfolioStats } from '../lib/portfolio-stats.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -35,8 +36,28 @@ export function SidePanel() {
 
   if (!state) return <div class="axpt-panel">Loading…</div>
 
+  const { balanceSol, totalPnlUsd, winRate } = getPortfolioStats(state)
+
   return (
     <div class="axpt-panel panel-enter">
+      {/* Portfolio-level stats header (spec §11): balance, total PnL, win rate. */}
+      <header class="axpt-panel-stats">
+        <div class="axpt-stat">
+          <span class="axpt-stat-label">Balance</span>
+          <span class="mono axpt-stat-value">{balanceSol.toFixed(3)} SOL</span>
+        </div>
+        <div class="axpt-stat">
+          <span class="axpt-stat-label">Total PnL</span>
+          <span class={`mono axpt-stat-value ${totalPnlUsd >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
+            {totalPnlUsd >= 0 ? '+' : ''}
+            {totalPnlUsd.toFixed(2)}
+          </span>
+        </div>
+        <div class="axpt-stat">
+          <span class="axpt-stat-label">Win rate</span>
+          <span class="mono axpt-stat-value">{winRate === null ? '—' : `${(winRate * 100).toFixed(0)}%`}</span>
+        </div>
+      </header>
       <nav class="axpt-tabs">
         {TABS.map((t) => (
           <button key={t} class={t === tab ? 'axpt-tab-active' : ''} onClick={() => setTab(t)}>

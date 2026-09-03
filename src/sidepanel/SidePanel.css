@@ -4,6 +4,23 @@
   flex-direction: column;
   height: 100vh;
 }
+.axpt-panel-stats {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.axpt-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.axpt-stat-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .axpt-tabs {
   display: flex;
   border-bottom: 1px solid var(--color-border);
@@ -48,6 +65,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+.axpt-position-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
 }
 .axpt-muted {
   color: var(--color-text-muted);
