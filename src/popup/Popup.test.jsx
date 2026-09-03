@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/preact'
 import { Popup, POPUP_POLL_MS } from './Popup.jsx'
 
+// Tokens with no image render a monogram avatar, which repeats the symbol's first
+// letters but is aria-hidden. Text queries should look at what a user actually reads.
+const NOT_DECORATIVE = { ignore: '[aria-hidden="true"]' }
+
 function mockChromeWithState(state) {
   globalThis.chrome = {
     runtime: { sendMessage: vi.fn() },
@@ -110,8 +114,8 @@ describe('Popup', () => {
 
   it('renders each open position with its symbol and quantity', async () => {
     render(<Popup />)
-    await waitFor(() => expect(screen.getByText('A')).toBeInTheDocument())
-    expect(screen.getByText('B')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('A', NOT_DECORATIVE)).toBeInTheDocument())
+    expect(screen.getByText('B', NOT_DECORATIVE)).toBeInTheDocument()
     expect(screen.getByText('1.0000')).toBeInTheDocument()
     expect(screen.getByText('2.0000')).toBeInTheDocument()
   })
@@ -119,9 +123,9 @@ describe('Popup', () => {
   it('caps the quick view at 4 positions even when more are open', async () => {
     mockChromeWithState({ balanceSol: 1, positions: positionsFor(['A', 'B', 'C', 'D', 'E', 'F']) })
     render(<Popup />)
-    await waitFor(() => expect(screen.getByText('A')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('A', NOT_DECORATIVE)).toBeInTheDocument())
     expect(screen.queryAllByRole('listitem')).toHaveLength(4)
-    expect(screen.getByText('D')).toBeInTheDocument()
+    expect(screen.getByText('D', NOT_DECORATIVE)).toBeInTheDocument()
     expect(screen.queryByText('E')).not.toBeInTheDocument()
     expect(screen.queryByText('F')).not.toBeInTheDocument()
   })
@@ -134,7 +138,7 @@ describe('Popup', () => {
     act(() => listener({ balanceSol: { newValue: 9.25 } }, 'local'))
 
     await waitFor(() => expect(screen.getByText('9.250 SOL')).toBeInTheDocument())
-    expect(screen.getByText('A')).toBeInTheDocument() // keys the write didn't touch survive
+    expect(screen.getByText('A', NOT_DECORATIVE)).toBeInTheDocument() // keys the write didn't touch survive
     expect(screen.getByText('+3.50 PnL')).toBeInTheDocument()
   })
 

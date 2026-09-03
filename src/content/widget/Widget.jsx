@@ -1,3 +1,4 @@
+import { TokenIcon } from '../../ui/TokenIcon.jsx'
 // src/content/widget/Widget.jsx
 import { useState } from 'preact/hooks'
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
@@ -38,7 +39,7 @@ export function Widget({ position, onBuyPreset, onSellPreset, marketCapText = ''
     <div class="axpt-widget">
       {position && (
         <div class="axpt-widget-summary">
-          <img class="axpt-token-image" src={position.imageUrl} alt="" />
+          <TokenIcon imageUrl={position.imageUrl} symbol={position.symbol} name={position.name} mint={position.mint} size={20} />
           <span>{position.name}</span>
           {position.symbol && <span class="axpt-token-symbol">{position.symbol}</span>}
           {marketCapText && <span class="axpt-token-mc mono">MC {marketCapText}</span>}

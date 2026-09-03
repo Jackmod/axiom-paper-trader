@@ -50,3 +50,19 @@ body {
 .axpt-pnl-negative {
   color: var(--color-sell);
 }
+
+/* Token avatar: a real image when the APIs know the token, a stable monogram when not. */
+.axpt-token-icon {
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.axpt-token-monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: 0.02em;
+}

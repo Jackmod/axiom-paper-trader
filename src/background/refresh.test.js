@@ -116,3 +116,58 @@ describe('refreshAllPositions', () => {
     expect(nextState.tradeHistory).toEqual([])
   })
 })
+
+// Token identity comes from the price APIs, not the page: this runs for every position
+// the user holds, including ones not currently on screen.
+describe('refreshAllPositions — token identity backfill', () => {
+  const nameless = () => ({
+    balanceSol: 1,
+    positions: { M: { qty: 1, avgEntryUsd: 10, lastPriceUsd: 10, name: '', symbol: '', imageUrl: '', stale: false } },
+    portfolioSnapshots: [],
+  })
+  const priced = vi.fn().mockResolvedValue({ priceUsd: 12, source: 'jupiter' })
+
+  it('fills in name, symbol and image for a position that has none', async () => {
+    const meta = vi.fn().mockResolvedValue({ name: 'Morko', symbol: 'MORKO', imageUrl: 'https://img/x.png' })
+
+    const next = await refreshAllPositions(nameless(), priced, meta)
+
+    expect(next.positions.M).toMatchObject({ name: 'Morko', symbol: 'MORKO', imageUrl: 'https://img/x.png' })
+  })
+
+  it('does not re-fetch identity for a position that already has it', async () => {
+    const meta = vi.fn()
+    const state = {
+      balanceSol: 1,
+      positions: { M: { qty: 1, avgEntryUsd: 10, lastPriceUsd: 10, name: 'N', symbol: 'S', imageUrl: 'u' } },
+      portfolioSnapshots: [],
+    }
+
+    await refreshAllPositions(state, priced, meta)
+
+    expect(meta).not.toHaveBeenCalled()
+  })
+
+  it('still refreshes the price when identity lookup fails, and retries next tick', async () => {
+    const meta = vi.fn().mockRejectedValue(new Error('offline'))
+
+    const next = await refreshAllPositions(nameless(), priced, meta)
+
+    expect(next.positions.M.lastPriceUsd).toBe(12) // price landed regardless
+    expect(next.positions.M.name).toBe('') // still nameless, so it will be asked for again
+  })
+
+  it('keeps identity it already has rather than overwriting with a partial answer', async () => {
+    const meta = vi.fn().mockResolvedValue({ name: 'Other', symbol: 'OTHER', imageUrl: 'https://img/y.png' })
+    const state = {
+      balanceSol: 1,
+      positions: { M: { qty: 1, avgEntryUsd: 10, lastPriceUsd: 10, name: 'Kept', symbol: '', imageUrl: '' } },
+      portfolioSnapshots: [],
+    }
+
+    const next = await refreshAllPositions(state, priced, meta)
+
+    expect(next.positions.M.name).toBe('Kept')
+    expect(next.positions.M.symbol).toBe('OTHER') // the gap is filled
+  })
+})

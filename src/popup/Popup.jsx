@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { getUnrealizedPnl } from '../lib/position-engine.js'
+import { TokenIcon } from '../ui/TokenIcon.jsx'
 import './Popup.css'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -50,7 +51,7 @@ export function Popup() {
       <ul class="axpt-popup-positions">
         {positions.slice(0, 4).map(([mint, p]) => (
           <li key={mint} class="axpt-popup-position">
-            <img src={p.imageUrl} alt="" />
+            <TokenIcon imageUrl={p.imageUrl} symbol={p.symbol} name={p.name} mint={mint} size={20} />
             <span>{p.symbol}</span>
             <span class="mono">{p.qty.toFixed(4)}</span>
           </li>

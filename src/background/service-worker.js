@@ -15,6 +15,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const { nextState, response } = await handleMessage(message, state)
     await setState(nextState)
     sendResponse(response)
+
+    // A brand-new position has no name or icon yet — identity comes from the price APIs,
+    // not the page. Resolve it right after the trade instead of leaving the row blank
+    // until the next refresh tick, which the user would read as the trade not landing.
+    // This runs after sendResponse so the trade still feels instant.
+    if (response?.ok && (message.type === 'BUY' || message.type === 'SELL')) {
+      const refreshed = await refreshAllPositions(await getState(), resolvePrice)
+      await setState(refreshed)
+    }
   })()
   return true // keep the message channel open for the async response
 })

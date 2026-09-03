@@ -1,4 +1,5 @@
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
+import { TokenIcon } from '../../ui/TokenIcon.jsx'
 
 export function Positions({ positions }) {
   const entries = Object.entries(positions ?? {})
@@ -10,7 +11,7 @@ export function Positions({ positions }) {
         const { pnlUsd, pnlPct } = getUnrealizedPnl(p)
         return (
           <li key={mint} class="axpt-position-row">
-            <img src={p.imageUrl} alt="" />
+            <TokenIcon imageUrl={p.imageUrl} symbol={p.symbol} name={p.name} mint={mint} size={32} />
             <div class="axpt-position-main">
               <span>{p.name}</span>
               <span class="mono axpt-muted">
