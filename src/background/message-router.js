@@ -64,5 +64,9 @@ export async function handleMessage(message, state) {
     }
   }
 
+  if (message.type === 'SYNC_NOW') {
+    return { nextState: state, response: { ok: true } } // service-worker.js does the actual refresh; the router just acknowledges
+  }
+
   return { nextState: state, response: { ok: false, error: `Unknown message type: ${message.type}` } }
 }

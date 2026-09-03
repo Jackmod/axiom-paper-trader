@@ -191,3 +191,10 @@ describe('handleMessage', () => {
     expect(nextState.balanceSol).toBeLessThan(0)
   })
 })
+
+describe('SYNC_NOW', () => {
+  it('is accepted as a valid message type (the router lets the caller trigger a refresh)', async () => {
+    const { response } = await handleMessage({ type: 'SYNC_NOW' }, DEFAULT_STATE)
+    expect(response.ok).toBe(true)
+  })
+})

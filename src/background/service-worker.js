@@ -5,12 +5,23 @@ import { resolvePrice } from '../lib/price-resolver.js'
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   ;(async () => {
+    if (message.type === 'SYNC_NOW') {
+      const state = await getState()
+      await setState(await refreshAllPositions(state, resolvePrice))
+      sendResponse({ ok: true })
+      return
+    }
     const state = await getState()
     const { nextState, response } = await handleMessage(message, state)
     await setState(nextState)
     sendResponse(response)
   })()
   return true // keep the message channel open for the async response
+})
+
+chrome.runtime.onStartup.addListener(async () => {
+  const state = await getState()
+  await setState(await refreshAllPositions(state, resolvePrice))
 })
 
 const REFRESH_ALARM = 'refresh-positions'
