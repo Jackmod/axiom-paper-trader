@@ -27,6 +27,11 @@ const STATE = {
     { id: 't3', mint: 'L', symbol: 'L', side: 'buy', qtySol: 1, priceUsd: 10, timestamp: 3000 },
     { id: 't4', mint: 'L', symbol: 'L', side: 'sell', qtySol: 1, priceUsd: 5, timestamp: 4000 },
   ],
+  portfolioSnapshots: [
+    { timestamp: new Date('2026-09-01T10:00').getTime(), totalPnlSol: 0 },
+    { timestamp: new Date('2026-09-02T10:00').getTime(), totalPnlSol: 2 },
+    { timestamp: new Date('2026-09-03T10:00').getTime(), totalPnlSol: 1 },
+  ],
 }
 
 // A: (8-10)*1 = -2, B: (4-5)*2 = -2 -> -4.00.
@@ -158,6 +163,35 @@ describe('SidePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'History' }))
 
     await waitFor(() => expect(screen.getByText(/no trades yet/i)).toBeInTheDocument())
+  })
+
+  // Like the History tab, the Analytics tab has to be fed from a specific storage key
+  // — asserting only that a chart appeared would still pass if the tab rendered an
+  // unfed <TrendGraph/>, so the path is pinned to the snapshot PnLs in STATE.
+  it('renders the Analytics charts from state.portfolioSnapshots', async () => {
+    const { container } = render(<SidePanel />)
+    await waitFor(() => expect(screen.getByText('Ay')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Analytics' }))
+
+    await waitFor(() => expect(container.querySelector('.axpt-trend-graph')).toBeInTheDocument())
+    expect(container.querySelector('.axpt-trend-graph path')).toHaveAttribute('d', 'M 0 120 L 140 0 L 280 60')
+    expect(screen.queryByText('Ay')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }))
+
+    await waitFor(() => expect(container.querySelectorAll('.axpt-pnl-calendar-cell')).toHaveLength(3))
+    expect(screen.getByTitle('2026-09-03: 1.00 SOL')).toBeInTheDocument()
+  })
+
+  it('shows the Analytics empty states on a fresh install, where portfolioSnapshots is undefined', async () => {
+    mockChromeWithState({})
+    render(<SidePanel />)
+    await waitFor(() => expect(screen.getByText('0.000 SOL')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Analytics' }))
+
+    await waitFor(() => expect(screen.getByText(/not enough history yet to plot a trend/i)).toBeInTheDocument())
   })
 
   it('re-renders live when the background writes to chrome.storage.local', async () => {
