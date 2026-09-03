@@ -4,11 +4,15 @@ export function scaleSnapshotsToPath(snapshots, width, height) {
   const pnls = snapshots.map((s) => s.totalPnlSol)
   const min = Math.min(...pnls)
   const max = Math.max(...pnls)
-  const range = max - min || 1
+  const range = max - min
 
   const points = snapshots.map((s, i) => {
     const x = (i / (snapshots.length - 1)) * width
-    const y = height - ((s.totalPnlSol - min) / range) * height
+    // A flat series (every snapshot at the same PnL — the default state on a fresh
+    // install) has no range to scale against: draw it down the middle rather than
+    // dividing by zero (NaN, invisible path) or pinning it to the bottom edge,
+    // where half of the stroke would be clipped outside the SVG box.
+    const y = range === 0 ? height / 2 : height - ((s.totalPnlSol - min) / range) * height
     return [x, y]
   })
 
