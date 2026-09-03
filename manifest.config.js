@@ -20,7 +20,7 @@ export default defineManifest({
   content_scripts: [
     {
       matches: ['https://axiom.trade/*'],
-      js: ['src/content/inject.js'],
+      js: ['src/content/inject.jsx'],
     },
   ],
   icons: { 16: 'src/icons/icon-16.png', 48: 'src/icons/icon-48.png', 128: 'src/icons/icon-128.png' },
