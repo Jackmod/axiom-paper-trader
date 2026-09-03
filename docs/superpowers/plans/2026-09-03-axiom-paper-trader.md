@@ -2468,7 +2468,9 @@ git commit -m "feat: shared design tokens and motion primitives"
 **Interfaces:**
 
 - Consumes: `attachTradeInterception` (Task 15), design tokens (Task 17).
-- Produces: `<Widget position={position|null} onBuyPreset={fn} onSellPreset={fn} />` — the injected buy/sell panel replica (spec §6). Task 19 mounts this into the page.
+- Produces: `<Widget position={position|null} onBuyPreset={fn} onSellPreset={fn} marketCapText="" rugBadgeText="" />` — the injected buy/sell panel replica (spec §6). Task 19 mounts this into the page.
+
+> **Deviation from the Step 3/5 code below, applied in a follow-up `fix:` commit.** The literal component in Step 3 omits four things spec §6 requires and no later task adds, so they were built here: (a) the custom SOL amount input on the buy side, (b) `symbol`/MC/Rug badge in the summary row — MC and the badge arrive as the two optional `marketCapText`/`rugBadgeText` props, fed from `scrapeTradeContext()`'s already-scraped text, so **Task 19 should pass them through** rather than leaving that scraped data dead, (c) unrealized PnL as an absolute amount as well as a %, and (d) a real hover tooltip (an absolutely-positioned element) carrying the exact amount the button would trade, computed from the live position and price, instead of a label swap that only restated the constant preset. Two unit notes: the absolute PnL leg is rendered in **SOL** (`qty * pnlPct / 100`, i.e. the SOL cost basis revalued — exactly what `message-router` credits back on a full sell), and the tooltips quote SOL plus the live USD *price* rather than a USD notional, because no SOL/USD rate exists in the content script and inventing one would be wrong by ~100x. The sell tooltip also says "SOL", not "tokens": `position.qty` is SOL-denominated everywhere else in this codebase.
 
 - [ ] **Step 1: Write the failing component tests**
 
