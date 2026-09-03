@@ -1,12 +1,21 @@
-// UNVERIFIED PLACEHOLDER SELECTORS — these are the shapes the plan proposes, but
-// they have NOT yet been checked against a live axiom.trade token page (Task 14
-// Step 2 requires a human with DevTools open on the real site; no automated run
-// can do it). Before this module is relied on, open a real token page, use the
-// element picker on the Buy button, Sell buttons/tabs, SOL-amount input, token
-// name/symbol, token image, mint, priority fee, and slippage, and replace any
-// value below that does not match. Prefer stable data-* attributes or ARIA roles
-// over generated class names, which Axiom may rebuild on every deploy. Re-verify
-// after any Axiom UI change.
+import { parseNumber } from './parse-number.js'
+
+// UNVERIFIED PLACEHOLDER SELECTORS — every value below is the shape Task 14
+// Step 2 proposes, NOT a selector read off the live site. Step 2/4 (element
+// picker on a real token page, then calling scrapeTradeContext() in the
+// DevTools console) still has to be done by hand, and it genuinely cannot be
+// automated from here: axiom.trade serves logged-out visitors a marketing
+// landing page, and /meme/<mint> sits behind a Cloudflare bot challenge
+// ("Performing security verification"), so an automated browser never reaches
+// the trading UI. The landing page it does serve emits zero [data-testid]
+// attributes — only framework-generated ones (data-dpl-id, data-discover,
+// data-nimg) — which is further reason to treat these as guesses.
+//
+// Until a human replaces them, findBuyButton() returns null and
+// scrapeTradeContext() returns null on the real site; Task 27's "trade
+// interception unavailable" banner is what surfaces that to the user.
+// Prefer stable data-* attributes or ARIA roles over generated class names,
+// which Axiom may rebuild on every deploy, and re-verify after any UI change.
 export const SELECTORS = {
   buyButton: '[data-testid="buy-button"]',
   sellButtons: '[data-testid="sell-percent-button"]',
@@ -18,9 +27,9 @@ export const SELECTORS = {
   priorityFee: '[data-testid="priority-fee-value"]',
   slippage: '[data-testid="slippage-value"]',
   displayedPrice: '[data-testid="token-price"]',
+  marketCap: '[data-testid="market-cap"]',
+  rugBadge: '[data-testid="rug-badge"]',
 }
-
-import { parseNumber } from './parse-number.js'
 
 export function findBuyButton() {
   return document.querySelector(SELECTORS.buyButton)
@@ -43,5 +52,10 @@ export function scrapeTradeContext() {
     priceUsd: parseNumber(document.querySelector(SELECTORS.displayedPrice)?.textContent),
     priorityFeeSol: parseNumber(document.querySelector(SELECTORS.priorityFee)?.textContent) ?? 0,
     slippagePct: parseNumber(document.querySelector(SELECTORS.slippage)?.textContent) ?? 0,
+    // MC and the rug badge are display-only (spec 6) and Axiom renders them with
+    // magnitude suffixes ("$450K"), so they are carried as the page's own text
+    // rather than parsed into numbers that would be wrong by 1000x.
+    marketCapText: document.querySelector(SELECTORS.marketCap)?.textContent?.trim() ?? '',
+    rugBadgeText: document.querySelector(SELECTORS.rugBadge)?.textContent?.trim() ?? '',
   }
 }
