@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .vite/
+
+# session-local scheduler lock, not project config
+.claude/

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { Positions } from './tabs/Positions.jsx'
 import { History } from './tabs/History.jsx'
 import { Analytics } from './tabs/Analytics.jsx'
+import { Settings } from './tabs/Settings.jsx'
 import { getPortfolioStats } from '../lib/portfolio-stats.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
@@ -71,6 +72,7 @@ export function SidePanel() {
         {tab === 'Positions' && <Positions positions={state.positions} />}
         {tab === 'History' && <History tradeHistory={state.tradeHistory} />}
         {tab === 'Analytics' && <Analytics snapshots={state.portfolioSnapshots} />}
+        {tab === 'Settings' && <Settings settings={state.settings} />}
       </div>
     </div>
   )
