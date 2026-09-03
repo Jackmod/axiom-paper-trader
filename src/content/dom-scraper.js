@@ -31,6 +31,20 @@ export const SELECTORS = {
   rugBadge: '[data-testid="rug-badge"]',
 }
 
+// Solana mint addresses are base58, 32-44 chars. Axiom's token routes carry the mint
+// directly (e.g. /meme/<mint>), which is a far more durable source than any DOM
+// attribute — a redesign rewrites markup, but the route has to keep identifying the
+// token. The DOM attribute stays as a fallback for routes that don't carry it.
+const MINT_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+export function readMint() {
+  const fromUrl = window.location.pathname.split('/').find((segment) => MINT_PATTERN.test(segment))
+  if (fromUrl) return fromUrl
+
+  const el = document.querySelector(SELECTORS.tokenMint)
+  return el?.getAttribute('data-token-mint') ?? null
+}
+
 export function findBuyButton() {
   return document.querySelector(SELECTORS.buyButton)
 }
@@ -40,8 +54,7 @@ export function findSellButtons() {
 }
 
 export function scrapeTradeContext() {
-  const mintEl = document.querySelector(SELECTORS.tokenMint)
-  const mint = mintEl?.getAttribute('data-token-mint')
+  const mint = readMint()
   if (!mint) return null
 
   return {

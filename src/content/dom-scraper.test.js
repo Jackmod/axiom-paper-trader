@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { findBuyButton, findSellButtons, scrapeTradeContext } from './dom-scraper.js'
+import { findBuyButton, findSellButtons, scrapeTradeContext, readMint } from './dom-scraper.js'
 
 // These tests do NOT (and cannot) verify that SELECTORS match the real
 // axiom.trade markup — only a human on a logged-in token page can do that
@@ -95,5 +95,41 @@ describe('findBuyButton / findSellButtons', () => {
     document.body.innerHTML = '<div data-token-mint="MintOnly111"></div>'
     expect(findBuyButton()).toBeNull()
     expect(findSellButtons()).toEqual([])
+  })
+})
+
+// The mint is read from the route first: Axiom's token URLs carry it, and a URL is far
+// more durable than markup a redesign can rewrite.
+describe('readMint', () => {
+  const setPath = (pathname) => window.history.replaceState({}, '', pathname)
+
+  afterEach(() => setPath('/'))
+
+  it('reads the mint from an Axiom token route', () => {
+    setPath('/meme/So11111111111111111111111111111111111111112')
+    expect(readMint()).toBe('So11111111111111111111111111111111111111112')
+  })
+
+  it('ignores non-mint path segments', () => {
+    setPath('/meme/So11111111111111111111111111111111111111112')
+    expect(readMint()).not.toBe('meme')
+  })
+
+  it('falls back to the DOM attribute when the route carries no mint', () => {
+    setPath('/discover')
+    document.body.innerHTML = '<div data-token-mint="So11111111111111111111111111111111111111112"></div>'
+    expect(readMint()).toBe('So11111111111111111111111111111111111111112')
+  })
+
+  it('returns null when neither source has one', () => {
+    setPath('/discover')
+    document.body.innerHTML = '<div></div>'
+    expect(readMint()).toBeNull()
+  })
+
+  it('rejects a segment that is too short to be a mint', () => {
+    setPath('/meme/abc')
+    document.body.innerHTML = ''
+    expect(readMint()).toBeNull()
   })
 })
