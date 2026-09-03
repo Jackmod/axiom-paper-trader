@@ -1,3 +1,4 @@
+import { formatSol, formatPrice } from '../../ui/format.js'
 export function History({ tradeHistory }) {
   const sorted = [...(tradeHistory ?? [])].sort((a, b) => b.timestamp - a.timestamp)
   if (sorted.length === 0) return <p class="axpt-empty">No trades yet.</p>
@@ -11,7 +12,7 @@ export function History({ tradeHistory }) {
           </span>
           <span>{trade.symbol}</span>
           <span>
-            {trade.qtySol.toFixed(4)} SOL @ ${trade.priceUsd.toFixed(6)}
+            {formatSol(trade.solAmount)} SOL @ {formatPrice(trade.priceUsd)}
           </span>
           <span class="axpt-muted">{new Date(trade.timestamp).toLocaleString()}</span>
         </li>

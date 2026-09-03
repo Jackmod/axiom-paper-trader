@@ -1,54 +1,61 @@
-import { applyBuy, applySell, getUnrealizedPnl } from './position-engine.js'
+import { getUnrealizedPnl } from './position-engine.js'
 
-// Total unrealized PnL across every open position, in USD.
+// Portfolio-level figures for the Side Panel header and the popup (spec §11).
+//
+// These are SOL-first, because SOL is the currency the user funds the account in and
+// thinks in. USD is carried alongside for the price-denominated views.
+
 export function getTotalUnrealizedPnlUsd(positions) {
   return Object.values(positions ?? {}).reduce((sum, p) => sum + getUnrealizedPnl(p).pnlUsd, 0)
 }
 
-// Win rate (spec §11) is the share of closed slices that realized a profit.
-// `tradeHistory` (spec §12) stores no realized PnL, so the log is replayed through
-// the same position engine the background uses: each sell's realizedPnlUsd falls
-// out of the weighted-average entry the replay has built up to that point, which is
-// the only way to get this right when one mint was bought at several prices.
-// A flat close (exactly zero realized) is not a win.
-export function getWinRate(tradeHistory) {
-  let positions = {}
-  let wins = 0
-  let closed = 0
-
-  for (const trade of tradeHistory ?? []) {
-    try {
-      if (trade.side === 'buy') {
-        positions = applyBuy(positions, {
-          mint: trade.mint,
-          symbol: trade.symbol,
-          name: trade.symbol,
-          imageUrl: '',
-          qtySol: trade.qtySol,
-          priceUsd: trade.priceUsd,
-        })
-      } else if (trade.side === 'sell') {
-        const result = applySell(positions, { mint: trade.mint, qtySol: trade.qtySol, priceUsd: trade.priceUsd })
-        positions = result.positions
-        closed += 1
-        if (result.realizedPnlUsd > 0) wins += 1
-      }
-    } catch {
-      // A trade that cannot be replayed (history truncated by an account reset, a
-      // sell whose buy predates the log) is skipped rather than poisoning the stat.
-    }
-  }
-
-  return closed === 0 ? null : wins / closed
+/**
+ * Unrealised PnL across all open positions, in SOL — what the holdings are worth today
+ * minus what was actually paid for them. Null when no SOL/USD rate is known yet, because
+ * a made-up rate would be worse than an honest "—".
+ */
+export function getTotalUnrealizedPnlSol(positions, solUsdPrice) {
+  if (!(solUsdPrice > 0)) return null
+  return Object.values(positions ?? {}).reduce((sum, p) => sum + (getUnrealizedPnl(p, solUsdPrice).pnlSol ?? 0), 0)
 }
 
-// The Side Panel's portfolio-level stats header (spec §11): balance, total PnL,
-// win rate. `winRate` is null when nothing has been closed yet — the caller
-// renders a placeholder rather than a misleading 0%.
+export function getTotalPositionValueSol(positions, solUsdPrice) {
+  if (!(solUsdPrice > 0)) return 0
+  return Object.values(positions ?? {}).reduce((sum, p) => sum + (getUnrealizedPnl(p, solUsdPrice).valueSol ?? 0), 0)
+}
+
+/**
+ * Win rate (spec §11): the share of closed slices that realised a profit.
+ *
+ * Each sell now records its own `realizedPnlSol` at the moment it happened, computed
+ * against the cost basis the position actually had. An earlier version replayed the
+ * whole trade log through the engine to reconstruct this; reading the recorded figure is
+ * both simpler and more accurate, since it cannot drift from what the user was told at
+ * the time. A flat close is not a win.
+ */
+export function getWinRate(tradeHistory) {
+  const sells = (tradeHistory ?? []).filter((t) => t.side === 'sell' && Number.isFinite(t.realizedPnlSol))
+  if (sells.length === 0) return null
+  return sells.filter((t) => t.realizedPnlSol > 0).length / sells.length
+}
+
+export function getRealizedPnlSol(tradeHistory) {
+  return (tradeHistory ?? [])
+    .filter((t) => t.side === 'sell' && Number.isFinite(t.realizedPnlSol))
+    .reduce((sum, t) => sum + t.realizedPnlSol, 0)
+}
+
 export function getPortfolioStats(state) {
+  const positions = state?.positions ?? {}
+  const solUsdPrice = state?.solUsdPrice ?? 0
+
   return {
     balanceSol: state?.balanceSol ?? 0,
-    totalPnlUsd: getTotalUnrealizedPnlUsd(state?.positions),
+    positionValueSol: getTotalPositionValueSol(positions, solUsdPrice),
+    unrealizedPnlSol: getTotalUnrealizedPnlSol(positions, solUsdPrice),
+    realizedPnlSol: getRealizedPnlSol(state?.tradeHistory),
+    totalPnlUsd: getTotalUnrealizedPnlUsd(positions),
     winRate: getWinRate(state?.tradeHistory),
+    openPositions: Object.keys(positions).length,
   }
 }

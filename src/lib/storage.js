@@ -3,6 +3,9 @@ export const SCHEMA_VERSION = 1
 export const DEFAULT_STATE = {
   settings: { paperModeEnabled: true },
   balanceSol: 0,
+  // SOL/USD, refreshed every tick. Trades need it to convert between the currency the
+  // user spends (SOL) and the currency tokens are priced in (USD).
+  solUsdPrice: 0,
   positions: {},
   tradeHistory: [],
   portfolioSnapshots: [],

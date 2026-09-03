@@ -4,11 +4,65 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--color-text);
 }
+
+/* Compact header: token identity, live price, paper balance, collapse toggle. */
+.axpt-widget-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.axpt-widget-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.axpt-widget-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.axpt-widget-sub {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.axpt-widget-balance {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.axpt-widget-collapse {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  font-size: 12px;
+}
+
+/* Holding / average entry / PnL, as a tight label-value grid. */
+.axpt-widget-position {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-bg);
+  border-radius: var(--radius-card);
+  font-size: 11px;
+}
+.axpt-muted { color: var(--color-text-muted); }
 
 .axpt-widget-summary {
   display: flex;

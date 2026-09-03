@@ -108,7 +108,7 @@ describe("attachTradeInterception — Axiom's one-click amount presets", () => {
     click(byLabel('0.25'))
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
 
-    expect(onTrade.mock.calls[0][0]).toMatchObject({ side: 'buy', qtySol: 0.25 })
+    expect(onTrade.mock.calls[0][0]).toMatchObject({ side: 'buy', solSpent: 0.25 })
   })
 
   it('handles a whole-number preset', async () => {
@@ -118,7 +118,7 @@ describe("attachTradeInterception — Axiom's one-click amount presets", () => {
     click(byLabel('2'))
     await vi.waitFor(() => expect(onTrade).toHaveBeenCalled())
 
-    expect(onTrade.mock.calls[0][0].qtySol).toBe(2)
+    expect(onTrade.mock.calls[0][0].solSpent).toBe(2)
   })
 
   it('swallows the preset click so Axiom never fires the real one-click trade', () => {
@@ -226,7 +226,7 @@ describe('attachTradeInterception — detaching', () => {
 })
 
 describe('attachTradeInterception — buy payload', () => {
-  it('carries the mint, the entered SOL amount, and the quoted fill price', async () => {
+  it('carries the mint, the SOL amount spent, and the quoted fill price', async () => {
     const onTrade = vi.fn()
     attach(onTrade)
 
@@ -236,7 +236,7 @@ describe('attachTradeInterception — buy payload', () => {
     expect(onTrade.mock.calls[0][0]).toMatchObject({
       side: 'buy',
       mint: MINT,
-      qtySol: 0.25,
+      solSpent: 0.25,
       priceUsd: 0.000005, // from the quote API, not the flat DOM price
     })
   })

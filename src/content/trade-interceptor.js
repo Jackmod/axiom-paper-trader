@@ -66,7 +66,7 @@ export function attachTradeInterception(onTradeConfirmed) {
     if (hit.kind === 'buy') {
       if (!hit.qtySol || hit.qtySol <= 0) return // no readable amount — better nothing than a phantom trade
       const priceUsd = await resolveFillPrice(context, hit.qtySol)
-      onTradeConfirmed({ side: 'buy', ...context, qtySol: hit.qtySol, priceUsd })
+      onTradeConfirmed({ side: 'buy', ...context, solSpent: hit.qtySol, priceUsd })
       return
     }
 

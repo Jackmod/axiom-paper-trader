@@ -1,5 +1,6 @@
 import { captureSnapshot, appendSnapshot } from '../lib/snapshots.js'
 import { fetchTokenMetadata, needsMetadata, mergeMetadata } from '../lib/token-metadata.js'
+ import { fetchJupiterPrice, SOL_MINT } from '../lib/price-sources/jupiter.js'
 
 /**
  * Refresh every open position's price, and fill in any missing token identity.
@@ -9,7 +10,14 @@ import { fetchTokenMetadata, needsMetadata, mergeMetadata } from '../lib/token-m
  * user holds, including ones they aren't looking at, and keeps working after they close
  * the tab. `resolveMetadata` is injected so this stays testable without the network.
  */
-export async function refreshAllPositions(state, resolvePrice, resolveMetadata = fetchTokenMetadata) {
+export async function refreshAllPositions(
+  state,
+  resolvePrice,
+  resolveMetadata = fetchTokenMetadata,
+  resolveSolUsd = () => fetchJupiterPrice(SOL_MINT),
+) {
+  // Kept fresh here so a trade never has to block on fetching it.
+  const solUsdPrice = Number(await resolveSolUsd().catch(() => null)) || state.solUsdPrice || 0
   const positions = { ...state.positions }
 
   for (const [mint, position] of Object.entries(positions)) {
@@ -38,7 +46,7 @@ export async function refreshAllPositions(state, resolvePrice, resolveMetadata =
     positions[mint] = next
   }
 
-  const nextState = { ...state, positions }
+  const nextState = { ...state, positions, solUsdPrice }
   const snapshot = captureSnapshot(nextState)
   return { ...nextState, portfolioSnapshots: appendSnapshot(state.portfolioSnapshots, snapshot) }
 }

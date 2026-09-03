@@ -10,6 +10,7 @@ import { attachTradeInterception, resolveFillPrice } from './trade-interceptor.j
 import { scrapeTradeContext } from './dom-scraper.js'
 import { buildTradeMessage } from './trade-message.js'
 import { checkInterceptionHealth } from './selector-warning.js'
+import { watchRoute } from './route-watcher.js'
 import { DEFAULT_STATE } from '../lib/storage.js'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -31,6 +32,25 @@ function App() {
   const [paperModeEnabled, setPaperModeEnabled] = useState(undefined)
   const [pageContext, setPageContext] = useState(() => scrapeTradeContext())
   const [position, setPosition] = useState(null)
+  // Balance and the SOL/USD rate, so the widget can show what the account is worth and
+  // denominate PnL in SOL without doing any of that maths itself.
+  const [account, setAccount] = useState({ balanceSol: 0, solUsdPrice: 0 })
+
+  useEffect(() => {
+    chrome.storage.local.get(['balanceSol', 'solUsdPrice'], ({ balanceSol, solUsdPrice }) => {
+      setAccount({ balanceSol: balanceSol ?? 0, solUsdPrice: solUsdPrice ?? 0 })
+    })
+    const onAccountChanged = (changes, areaName) => {
+      if (areaName !== 'local') return
+      if (!changes.balanceSol && !changes.solUsdPrice) return
+      setAccount((prev) => ({
+        balanceSol: changes.balanceSol ? (changes.balanceSol.newValue ?? 0) : prev.balanceSol,
+        solUsdPrice: changes.solUsdPrice ? (changes.solUsdPrice.newValue ?? 0) : prev.solUsdPrice,
+      }))
+    }
+    chrome.storage.onChanged.addListener(onAccountChanged)
+    return () => chrome.storage.onChanged.removeListener(onAccountChanged)
+  }, [])
 
   const mint = pageContext?.mint ?? null
 
@@ -90,11 +110,24 @@ function App() {
     return () => clearInterval(timer)
   }, [mint])
 
+  // Follow the user around the SPA. Clicking a token on Pulse, or any chart, swaps the
+  // view without reloading the page — so without this the widget reads whatever was on
+  // screen at load (usually the feed, with no token at all) and never updates again.
+  // That is why it could sit there showing nothing while the user looked at a token.
+  useEffect(() => {
+    return watchRoute(() => {
+      // Clearing first matters: if the new route's panel hasn't rendered yet, showing
+      // the PREVIOUS token's position would invite a trade against the wrong coin.
+      setPageContext(scrapeTradeContext())
+      setPosition(null)
+    })
+  }, [])
+
   const sendTrade = useCallback((trade) => {
     // Keep the display-only text (spec §6) in step with what was just scraped.
     setPageContext({ mint: trade.mint, marketCapText: trade.marketCapText, rugBadgeText: trade.rugBadgeText })
 
-    const message = buildTradeMessage(trade, positionRef.current)
+    const message = buildTradeMessage({ ...trade, solSpent: trade.solSpent ?? trade.qtySol }, positionRef.current)
     if (!message) return // nothing held to sell — see trade-message.js
 
     chrome.runtime.sendMessage(message, (response) => {
@@ -119,7 +152,7 @@ function App() {
     const context = scrapeTradeContext()
     if (!context) return
     const priceUsd = await resolveFillPrice(context, amountSol)
-    sendTrade({ side: 'buy', ...context, qtySol: amountSol, priceUsd })
+    sendTrade({ side: 'buy', ...context, solSpent: amountSol, priceUsd })
   }
 
   function handleSellPreset(pct) {
@@ -134,8 +167,11 @@ function App() {
   return (
     <Widget
       position={position}
+      mint={mint}
+      priceUsd={pageContext?.priceUsd}
+      balanceSol={account.balanceSol}
+      solUsdPrice={account.solUsdPrice}
       marketCapText={pageContext?.marketCapText ?? ''}
-      rugBadgeText={pageContext?.rugBadgeText ?? ''}
       onBuyPreset={handleBuyPreset}
       onSellPreset={handleSellPreset}
     />
@@ -144,6 +180,21 @@ function App() {
 
 const mountPoint = document.createElement('div')
 mountPoint.id = 'axiom-paper-trader-root'
+
+// Positioned inline, not via the stylesheet, so Axiom's own CSS cannot win against it.
+// Without this the widget was a plain block appended to <body>: a full-width banner that
+// shoved the entire page down. It has to be a compact floating panel that sits over the
+// page like Axiom's own quick-trade menu and takes up no layout space at all.
+Object.assign(mountPoint.style, {
+  position: 'fixed',
+  right: '16px',
+  bottom: '16px',
+  zIndex: '2147483646', // one below the health banner, which must always win
+  width: '320px',
+  maxWidth: 'calc(100vw - 32px)',
+  colorScheme: 'dark',
+})
+
 document.body.appendChild(mountPoint)
 render(<App />, mountPoint)
 

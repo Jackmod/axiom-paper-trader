@@ -1,118 +1,156 @@
-import { TokenIcon } from '../../ui/TokenIcon.jsx'
 // src/content/widget/Widget.jsx
+//
+// The compact quick-trade panel that floats over axiom.trade. It deliberately mirrors
+// the shape of Axiom's own quick-trade menu: a small header identifying the token and
+// the position, one-click SOL amounts, a custom amount, and percentage sells.
 import { useState } from 'preact/hooks'
+import { TokenIcon } from '../../ui/TokenIcon.jsx'
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
+import { formatPrice, formatSol, formatPercent, formatTokenAmount } from '../../ui/format.js'
 import './Widget.css'
 
 const BUY_PRESETS_SOL = [0.1, 0.25, 0.5, 1, 2, 5]
 const SELL_PRESETS_PCT = [25, 50, 100]
 
-// Everything the widget knows about money is denominated the way the rest of the
-// extension denominates it: `qty` and `balanceSol` are SOL (see message-router's
-// BUY/SELL balance math), while `avgEntryUsd`/`lastPriceUsd` are USD per token.
-// There is no SOL/USD rate anywhere in the content script, so a preset's USD
-// notional cannot be computed here — the tooltips show the exact SOL amount plus
-// the live USD price the trade would fill at, and never invent a USD total.
-function formatSol(sol) {
-  return `${sol >= 0 ? '+' : ''}${sol.toFixed(4)} SOL`
-}
-
-export function Widget({ position, onBuyPreset, onSellPreset, marketCapText = '', rugBadgeText = '' }) {
-  // Which preset the cursor is on, as 'buy:0.25' / 'sell:50' — one hover at a time.
+export function Widget({
+  position,
+  mint,
+  tokenName = '',
+  tokenSymbol = '',
+  tokenImageUrl = '',
+  priceUsd,
+  balanceSol = 0,
+  solUsdPrice = 0,
+  marketCapText = '',
+  onBuyPreset,
+  onSellPreset,
+}) {
   const [hovered, setHovered] = useState(null)
   const [customAmount, setCustomAmount] = useState('')
+  const [collapsed, setCollapsed] = useState(false)
 
   const customSol = Number.parseFloat(customAmount)
   const customIsValid = Number.isFinite(customSol) && customSol > 0
 
-  const priceUsd = position?.lastPriceUsd
-  const hasLivePrice = Number.isFinite(priceUsd) && priceUsd > 0
-  const priceLabel = hasLivePrice ? ` @ $${priceUsd.toFixed(4)}` : ''
+  // The live price is whichever is freshest: the position's last refresh, or what the
+  // page is showing for a token not yet held.
+  const livePrice = Number.isFinite(position?.lastPriceUsd) ? position.lastPriceUsd : priceUsd
+  const priceLabel = Number.isFinite(livePrice) && livePrice > 0 ? ` @ ${formatPrice(livePrice)}` : ''
 
-  // Unrealized PnL comes from the shared engine so the widget can never disagree
-  // with the Side Panel. The SOL leg is the % applied to the SOL cost basis of the
-  // position, which is exactly what message-router credits back on a full sell.
-  const pnl = position ? getUnrealizedPnl(position) : null
-  const pnlSol = pnl ? position.qty * (pnl.pnlPct / 100) : 0
+  // PnL comes from the shared engine, so the widget can never disagree with the Side
+  // Panel. `pnlSol` is measured against what was actually paid, not reconstructed.
+  const pnl = position ? getUnrealizedPnl(position, solUsdPrice) : null
+
+  // Identity: prefer what the background resolved for the position, fall back to
+  // whatever the page told us about the token currently being viewed.
+  const name = position?.name || tokenName
+  const symbol = position?.symbol || tokenSymbol
+  const imageUrl = position?.imageUrl || tokenImageUrl
 
   return (
-    <div class="axpt-widget">
-      {position && (
-        <div class="axpt-widget-summary">
-          <TokenIcon imageUrl={position.imageUrl} symbol={position.symbol} name={position.name} mint={position.mint} size={20} />
-          <span>{position.name}</span>
-          {position.symbol && <span class="axpt-token-symbol">{position.symbol}</span>}
-          {marketCapText && <span class="axpt-token-mc mono">MC {marketCapText}</span>}
-          {rugBadgeText && <span class="axpt-rug-badge">{rugBadgeText}</span>}
-          <span class="mono">Avg ${position.avgEntryUsd.toFixed(4)}</span>
-          <span class={`mono ${pnl.pnlPct >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-            {formatSol(pnlSol)} ({pnl.pnlPct >= 0 ? '+' : ''}
-            {pnl.pnlPct.toFixed(1)}%)
+    <div class={`axpt-widget ${collapsed ? 'axpt-widget-collapsed' : ''}`}>
+      <header class="axpt-widget-header">
+        <TokenIcon imageUrl={imageUrl} symbol={symbol} name={name} mint={mint} size={22} />
+        <div class="axpt-widget-title">
+          <span class="axpt-widget-name">{name || symbol || (mint ? 'Unnamed token' : 'No token open')}</span>
+          <span class="axpt-widget-sub mono">
+            {mint ? formatPrice(livePrice) : 'Open a token to trade'}
+            {marketCapText ? ` · MC ${marketCapText}` : ''}
           </span>
         </div>
-      )}
-
-      <div class="axpt-buy-row">
-        {BUY_PRESETS_SOL.map((amountSol) => (
-          <button
-            key={amountSol}
-            class="axpt-preset-btn axpt-buy-btn"
-            onMouseEnter={() => setHovered(`buy:${amountSol}`)}
-            onMouseLeave={() => setHovered(null)}
-            onClick={() => onBuyPreset(amountSol)}
-            aria-label={`Buy ${amountSol} SOL`}
-          >
-            {amountSol}
-            {hovered === `buy:${amountSol}` && (
-              <span class="axpt-tooltip mono" role="tooltip">{`${amountSol} SOL${priceLabel}`}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div class="axpt-custom-row">
-        <input
-          class="axpt-custom-input mono"
-          type="number"
-          min="0"
-          step="0.01"
-          inputMode="decimal"
-          placeholder="Custom SOL"
-          aria-label="Custom SOL amount"
-          value={customAmount}
-          onInput={(e) => setCustomAmount(e.currentTarget.value)}
-        />
+        <span class="axpt-widget-balance mono" title="Paper balance">
+          {formatSol(balanceSol)} SOL
+        </span>
         <button
-          class="axpt-preset-btn axpt-buy-btn"
-          aria-label="Buy custom SOL amount"
-          disabled={!customIsValid}
-          // Guarded as well as disabled: `disabled` is a UI affordance, but an empty or
-          // junk input would send NaN/0 into applyBuy, which throws on a non-positive qty.
-          onClick={() => customIsValid && onBuyPreset(customSol)}
+          class="axpt-widget-collapse"
+          aria-label={collapsed ? 'Expand paper trader' : 'Collapse paper trader'}
+          onClick={() => setCollapsed((c) => !c)}
         >
-          Buy
+          {collapsed ? '▴' : '▾'}
         </button>
-      </div>
+      </header>
 
-      <div class="axpt-sell-row">
-        {SELL_PRESETS_PCT.map((pct) => (
-          <button
-            key={pct}
-            class="axpt-preset-btn axpt-sell-btn"
-            aria-label={`${pct}%`}
-            onMouseEnter={() => setHovered(`sell:${pct}`)}
-            onMouseLeave={() => setHovered(null)}
-            onClick={() => onSellPreset(pct)}
-          >
-            {pct}%
-            {hovered === `sell:${pct}` && (
-              <span class="axpt-tooltip mono" role="tooltip">
-                {position ? `${((position.qty * pct) / 100).toFixed(4)} SOL${priceLabel}` : `Sell ${pct}%`}
+      {!collapsed && (
+        <>
+          {position && (
+            <div class="axpt-widget-position mono">
+              <span class="axpt-muted">Holding</span>
+              <span>{formatTokenAmount(position.qty)}</span>
+              <span class="axpt-muted">Avg</span>
+              <span>{formatPrice(position.avgEntryUsd)}</span>
+              <span class="axpt-muted">PnL</span>
+              <span class={pnl.pnlPct >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}>
+                {pnl.pnlSol === null ? formatPercent(pnl.pnlPct) : `${formatSol(pnl.pnlSol, { signed: true })} SOL`}
+                {pnl.pnlSol === null ? '' : ` (${formatPercent(pnl.pnlPct)})`}
               </span>
-            )}
-          </button>
-        ))}
-      </div>
+            </div>
+          )}
+
+          <div class="axpt-buy-row">
+            {BUY_PRESETS_SOL.map((amountSol) => (
+              <button
+                key={amountSol}
+                class="axpt-preset-btn axpt-buy-btn"
+                onMouseEnter={() => setHovered(`buy:${amountSol}`)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => onBuyPreset(amountSol)}
+                aria-label={`Buy ${amountSol} SOL`}
+                disabled={!mint}
+              >
+                {amountSol}
+                {hovered === `buy:${amountSol}` && (
+                  <span class="axpt-tooltip mono" role="tooltip">{`${amountSol} SOL${priceLabel}`}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div class="axpt-custom-row">
+            <input
+              class="axpt-custom-input mono"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="Custom SOL"
+              aria-label="Custom SOL amount"
+              value={customAmount}
+              onInput={(e) => setCustomAmount(e.currentTarget.value)}
+            />
+            <button
+              class="axpt-preset-btn axpt-buy-btn"
+              aria-label="Buy custom SOL amount"
+              disabled={!customIsValid || !mint}
+              // Guarded as well as disabled: `disabled` is a UI affordance, but junk input
+              // would send NaN into applyBuy, which throws on a non-positive amount.
+              onClick={() => customIsValid && mint && onBuyPreset(customSol)}
+            >
+              Buy
+            </button>
+          </div>
+
+          <div class="axpt-sell-row">
+            {SELL_PRESETS_PCT.map((pct) => (
+              <button
+                key={pct}
+                class="axpt-preset-btn axpt-sell-btn"
+                aria-label={`${pct}%`}
+                onMouseEnter={() => setHovered(`sell:${pct}`)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => onSellPreset(pct)}
+                disabled={!position}
+              >
+                {pct}%
+                {hovered === `sell:${pct}` && (
+                  <span class="axpt-tooltip mono" role="tooltip">
+                    {position ? `${formatTokenAmount((position.qty * pct) / 100)} tokens${priceLabel}` : `Sell ${pct}%`}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

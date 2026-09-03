@@ -5,6 +5,7 @@ import { Analytics } from './tabs/Analytics.jsx'
 import { Settings } from './tabs/Settings.jsx'
 import { Onboarding } from './components/Onboarding.jsx'
 import { getPortfolioStats } from '../lib/portfolio-stats.js'
+import { formatSol, formatPercent, formatUsd } from '../ui/format.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -73,7 +74,7 @@ export function SidePanel() {
     )
   }
 
-  const { balanceSol, totalPnlUsd, winRate } = getPortfolioStats(state)
+  const { balanceSol, positionValueSol, unrealizedPnlSol, totalPnlUsd, winRate } = getPortfolioStats(state)
 
   return (
     <div class="axpt-panel panel-enter">
@@ -86,13 +87,12 @@ export function SidePanel() {
       <header class="axpt-panel-stats">
         <div class="axpt-stat">
           <span class="axpt-stat-label">Balance</span>
-          <span class="mono axpt-stat-value">{balanceSol.toFixed(3)} SOL</span>
+          <span class="mono axpt-stat-value">{formatSol(balanceSol)} SOL</span>
         </div>
         <div class="axpt-stat">
           <span class="axpt-stat-label">Total PnL</span>
-          <span class={`mono axpt-stat-value ${totalPnlUsd >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-            {totalPnlUsd >= 0 ? '+' : ''}
-            {totalPnlUsd.toFixed(2)}
+          <span class={`mono axpt-stat-value ${(unrealizedPnlSol ?? totalPnlUsd) >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
+            {unrealizedPnlSol === null ? formatUsd(totalPnlUsd, { signed: true }) : `${formatSol(unrealizedPnlSol, { signed: true })} SOL`}
           </span>
         </div>
         <div class="axpt-stat">
@@ -108,7 +108,7 @@ export function SidePanel() {
         ))}
       </nav>
       <div class="axpt-tab-content">
-        {tab === 'Positions' && <Positions positions={state.positions} />}
+        {tab === 'Positions' && <Positions positions={state.positions} solUsdPrice={state.solUsdPrice ?? 0} />}
         {tab === 'History' && <History tradeHistory={state.tradeHistory} />}
         {tab === 'Analytics' && <Analytics snapshots={state.portfolioSnapshots} />}
         {tab === 'Settings' && <Settings settings={state.settings} />}

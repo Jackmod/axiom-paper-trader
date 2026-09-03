@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { getUnrealizedPnl } from '../lib/position-engine.js'
+import { formatSol, formatTokenAmount, formatUsd } from '../ui/format.js'
 import { TokenIcon } from '../ui/TokenIcon.jsx'
 import './Popup.css'
 import '../ui/tokens.css'
@@ -37,15 +38,18 @@ export function Popup() {
   if (!state) return <div class="axpt-popup">Loading…</div>
 
   const positions = Object.entries(state.positions ?? {})
-  const totalPnl = positions.reduce((sum, [, p]) => sum + getUnrealizedPnl(p).pnlUsd, 0)
+  const solUsdPrice = state.solUsdPrice ?? 0
+  // SOL when a rate is known, USD otherwise — never a number in an unstated currency.
+  const totalPnlSol = solUsdPrice > 0 ? positions.reduce((sum, [, p]) => sum + (getUnrealizedPnl(p, solUsdPrice).pnlSol ?? 0), 0) : null
+  const totalPnlUsd = positions.reduce((sum, [, p]) => sum + getUnrealizedPnl(p).pnlUsd, 0)
+  const totalPnl = totalPnlSol ?? totalPnlUsd
 
   return (
     <div class="axpt-popup panel-enter">
       <div class="axpt-popup-header">
-        <span class="mono">{(state.balanceSol ?? 0).toFixed(3)} SOL</span>
+        <span class="mono">{formatSol(state.balanceSol ?? 0)} SOL</span>
         <span class={`mono ${totalPnl >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-          {totalPnl >= 0 ? '+' : ''}
-          {totalPnl.toFixed(2)} PnL
+          {totalPnlSol === null ? formatUsd(totalPnlUsd, { signed: true }) : `${formatSol(totalPnlSol, { signed: true })} SOL`} PnL
         </span>
       </div>
       <ul class="axpt-popup-positions">
@@ -53,7 +57,7 @@ export function Popup() {
           <li key={mint} class="axpt-popup-position">
             <TokenIcon imageUrl={p.imageUrl} symbol={p.symbol} name={p.name} mint={mint} size={20} />
             <span>{p.symbol}</span>
-            <span class="mono">{p.qty.toFixed(4)}</span>
+            <span class="mono">{formatTokenAmount(p.qty)}</span>
           </li>
         ))}
       </ul>
