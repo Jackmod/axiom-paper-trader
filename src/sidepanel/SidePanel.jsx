@@ -3,6 +3,7 @@ import { Positions } from './tabs/Positions.jsx'
 import { History } from './tabs/History.jsx'
 import { Analytics } from './tabs/Analytics.jsx'
 import { Settings } from './tabs/Settings.jsx'
+import { Onboarding } from './components/Onboarding.jsx'
 import { getPortfolioStats } from '../lib/portfolio-stats.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
@@ -16,9 +17,32 @@ const TABS = ['Positions', 'History', 'Analytics', 'Settings']
 // to the alarm on its own.
 export const PANEL_POLL_MS = 7000
 
+// Spec §15: a short "terminal boot" sweep plays every time the panel opens. It is an
+// overlay rather than a gate — the panel mounts underneath it immediately, so the
+// animation never delays the data being ready or hides a slow first paint behind a
+// blank screen.
+export const INTRO_MS = 500
+
+// A genuinely fresh account: no balance, no positions, no trades. Spending down to zero
+// leaves history behind, so a user who has traded is never dragged back through setup.
+function needsOnboarding(state) {
+  return (
+    state.balanceSol === 0 &&
+    Object.keys(state.positions ?? {}).length === 0 &&
+    (state.tradeHistory?.length ?? 0) === 0
+  )
+}
+
 export function SidePanel() {
   const [tab, setTab] = useState('Positions')
   const [state, setState] = useState(null)
+  const [showIntro, setShowIntro] = useState(true)
+  const [justOnboarded, setJustOnboarded] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowIntro(false), INTRO_MS)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     const syncNow = () => chrome.runtime.sendMessage({ type: 'SYNC_NOW' })
@@ -39,10 +63,25 @@ export function SidePanel() {
 
   if (!state) return <div class="axpt-panel">Loading…</div>
 
+  // `justOnboarded` covers the gap between sending RESET_ACCOUNT and the resulting
+  // storage change arriving — without it the setup screen would flash back up for a beat.
+  if (!justOnboarded && needsOnboarding(state)) {
+    return (
+      <div class="axpt-panel panel-enter">
+        <Onboarding onComplete={() => setJustOnboarded(true)} />
+      </div>
+    )
+  }
+
   const { balanceSol, totalPnlUsd, winRate } = getPortfolioStats(state)
 
   return (
     <div class="axpt-panel panel-enter">
+      {showIntro && (
+        <div class="axpt-intro-overlay" aria-hidden="true">
+          <div class="axpt-boot-scan-line" />
+        </div>
+      )}
       {/* Portfolio-level stats header (spec §11): balance, total PnL, win rate. */}
       <header class="axpt-panel-stats">
         <div class="axpt-stat">

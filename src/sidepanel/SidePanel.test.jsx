@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/preact'
-import { SidePanel, PANEL_POLL_MS } from './SidePanel.jsx'
+import { SidePanel, PANEL_POLL_MS, INTRO_MS } from './SidePanel.jsx'
 
 function mockChromeWithState(state) {
   globalThis.chrome = {
@@ -222,5 +222,66 @@ describe('SidePanel', () => {
     const listener = capturedStorageListener()
     unmount()
     expect(chrome.storage.onChanged.removeListener).toHaveBeenCalledWith(listener)
+  })
+})
+
+// A fresh install has no balance, no positions and no trades. Spending down to zero
+// leaves history behind, which is what separates "never set up" from "traded it all away".
+const FRESH_STATE = { balanceSol: 0, positions: {}, tradeHistory: [], portfolioSnapshots: [] }
+const SPENT_STATE = {
+  balanceSol: 0,
+  positions: {},
+  tradeHistory: [{ id: '1', symbol: 'A', side: 'sell', qtySol: 1, priceUsd: 5, timestamp: 1000 }],
+  portfolioSnapshots: [],
+}
+
+describe('SidePanel — onboarding gate', () => {
+  it('shows the balance-setup screen on a fresh account instead of an empty portfolio', async () => {
+    mockChromeWithState(FRESH_STATE)
+    render(<SidePanel />)
+    await waitFor(() => expect(screen.getByText(/set your starting balance/i)).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Positions' })).not.toBeInTheDocument()
+  })
+
+  it('does NOT re-run setup for a user who traded their balance down to zero', async () => {
+    mockChromeWithState(SPENT_STATE)
+    render(<SidePanel />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Positions' })).toBeInTheDocument())
+    expect(screen.queryByText(/set your starting balance/i)).not.toBeInTheDocument()
+  })
+
+  it('leaves setup as soon as it completes, without flashing back while storage catches up', async () => {
+    mockChromeWithState(FRESH_STATE)
+    render(<SidePanel />)
+    await waitFor(() => screen.getByText(/set your starting balance/i))
+
+    fireEvent.click(screen.getByRole('button', { name: '5 SOL' }))
+
+    // Storage has not echoed the new balance back yet — the panel must not bounce
+    // the user back into setup in the meantime.
+    await waitFor(() => expect(screen.queryByText(/set your starting balance/i)).not.toBeInTheDocument())
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'RESET_ACCOUNT',
+      payload: { startingBalanceSol: 5 },
+    })
+  })
+})
+
+describe('SidePanel — intro animation', () => {
+  it('plays the boot sweep over the mounted panel, then clears it', async () => {
+    vi.useFakeTimers()
+    const { container } = render(<SidePanel />)
+
+    expect(container.querySelector('.axpt-intro-overlay')).toBeInTheDocument()
+    // The panel is mounted underneath the whole time — the sweep never gates the data.
+    expect(container.querySelector('.axpt-tabs')).toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(INTRO_MS + 1)
+    expect(container.querySelector('.axpt-intro-overlay')).not.toBeInTheDocument()
+  })
+
+  it('marks the overlay decorative so it is not announced to screen readers', () => {
+    const { container } = render(<SidePanel />)
+    expect(container.querySelector('.axpt-intro-overlay')).toHaveAttribute('aria-hidden', 'true')
   })
 })

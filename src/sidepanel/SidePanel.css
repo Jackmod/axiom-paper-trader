@@ -155,3 +155,22 @@
 }
 
 .axpt-settings-error { color: var(--color-sell); margin: 0; font-size: 12px; }
+
+/* Spec §15 intro: an opaque sweep over the mounted panel, not a blocking splash. */
+.axpt-panel { position: relative; }
+.axpt-intro-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-6);
+  animation: intro-clear 500ms ease-in-out forwards;
+  pointer-events: none;
+}
+@keyframes intro-clear {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.axpt-intro-overlay .axpt-boot-scan-line { width: 100%; }
