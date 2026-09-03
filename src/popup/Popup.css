@@ -1,0 +1,38 @@
+/* src/popup/Popup.css */
+.axpt-popup {
+  width: 280px;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.axpt-popup-header {
+  display: flex;
+  justify-content: space-between;
+}
+.axpt-popup-positions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.axpt-popup-position {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.axpt-popup-position img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+.axpt-expand-btn {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  padding: var(--space-2);
+  cursor: pointer;
+}
