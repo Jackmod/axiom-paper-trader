@@ -9,6 +9,7 @@ import { Widget } from './widget/Widget.jsx'
 import { attachTradeInterception, resolveFillPrice } from './trade-interceptor.js'
 import { scrapeTradeContext } from './dom-scraper.js'
 import { buildTradeMessage } from './trade-message.js'
+import { checkInterceptionHealth } from './selector-warning.js'
 import { DEFAULT_STATE } from '../lib/storage.js'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -145,3 +146,12 @@ const mountPoint = document.createElement('div')
 mountPoint.id = 'axiom-paper-trader-root'
 document.body.appendChild(mountPoint)
 render(<App />, mountPoint)
+
+// Spec §13: surface a broken scraper instead of failing silently. Axiom is a SPA, so
+// the trading UI may not exist on first paint and the route can change without a
+// reload — a single check at startup would false-alarm on a slow render and then miss
+// a real break after navigation. Re-checking on an interval covers both, and the check
+// clears its own banner as soon as the selectors match again.
+export const HEALTH_CHECK_MS = 5000
+setTimeout(checkInterceptionHealth, 1000)
+setInterval(checkInterceptionHealth, HEALTH_CHECK_MS)
