@@ -55,6 +55,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const [metadata, price] = await Promise.all([fetchTokenMetadata(mint), resolvePrice(mint)])
       sendResponse({
         ok: true,
+        // Echo the mint back. This is a refresh of an already-confirmed token and the
+        // caller stores the whole response, so omitting the mint meant every poll tick
+        // erased the identity it was supposed to be refreshing — detection "dropped"
+        // exactly one tick after it succeeded.
+        mint,
         name: metadata?.name ?? '',
         symbol: metadata?.symbol ?? '',
         imageUrl: metadata?.imageUrl ?? '',

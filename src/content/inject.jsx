@@ -98,7 +98,10 @@ function App() {
       chrome.runtime.sendMessage({ type: 'SYNC_NOW' }, () => void chrome.runtime.lastError)
       chrome.runtime.sendMessage({ type: 'TOKEN_INFO', payload: { mint } }, (response) => {
         if (chrome.runtime.lastError) return
-        if (response?.ok) setTokenInfo(response)
+        // MERGE, never replace. A refresh carries fresh prices, not a new identity — and
+        // a response missing any field must not erase what is already known. Replacing
+        // wholesale is what made detection drop one tick after it worked.
+        if (response?.ok) setTokenInfo((previous) => ({ ...previous, ...response, mint: previous?.mint ?? response.mint }))
       })
     }
     const timer = setInterval(tick, PRICE_POLL_MS)

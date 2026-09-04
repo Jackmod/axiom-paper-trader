@@ -244,3 +244,24 @@ test('a busy token page — dozens of holder wallets — still enables buying', 
 
   await context.close()
 })
+
+test('detection survives the price refresh cycle', async () => {
+  const { context, page } = await launch()
+  await page.goto(TOKEN_URL)
+  await expect(widget(page)).toBeVisible({ timeout: 15000 })
+  await expect(widget(page)).toContainText(/Desi 84|DESI/i, { timeout: 15000 })
+
+  // Reported as "it keeps dropping detection": the widget identified the token, then
+  // seconds later claimed it could not detect one — while still showing that token's name
+  // and an open position in it. The 7s refresh replaced the confirmed token wholesale with
+  // a response that carried no mint, so identity was erased by the very cycle meant to
+  // keep it current. Two refreshes is well past the point it used to break.
+  await page.waitForTimeout(16000)
+
+  await expect(widget(page)).not.toContainText(/Couldn’t detect the token/i)
+  await expect(widget(page)).not.toContainText(/No token open/i)
+  await expect(page.getByRole('button', { name: 'Buy 0.25 SOL' })).toBeEnabled()
+  await page.screenshot({ path: join(SHOTS, '08-detection-persists.png') })
+
+  await context.close()
+})
