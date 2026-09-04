@@ -187,3 +187,16 @@
   padding: 2px 5px;
   border-radius: 4px;
 }
+
+/* A rejected trade, stated in the panel rather than the console. Tinted rather than
+   solid-filled: this reports a refusal, it is not an alarm, and the widget floats over
+   Axiom's own UI where a block of saturated colour would read as a site error. */
+.axpt-widget-error {
+  margin: 0 0 8px;
+  padding: 7px 9px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--color-sell);
+  background: color-mix(in srgb, var(--color-sell) 12%, transparent);
+  border-left: 2px solid var(--color-sell);
+}

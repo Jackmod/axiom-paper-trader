@@ -280,12 +280,16 @@ describe('handleMessage', () => {
     expect(response.ok).toBe(false)
   })
 
-  it('BUY for more SOL than the current balance still records the trade (paper trading has no hard balance floor, but goes negative visibly rather than silently failing)', async () => {
+  // This used to assert the opposite — that an overdraw was RECORDED and the balance went
+  // negative — on the reasoning that rejecting it would silently drop a trade the user
+  // believed had gone through. The reasoning was sound while a rejection only reached
+  // console.warn; the widget now shows it, so the account can hold its floor. See the
+  // 'BUY balance floor' block below.
+  it('BUY for more SOL than the current balance never drives the account negative', async () => {
     const state = freshState({ balanceSol: 0.05, solUsdPrice: SOL_USD })
     const { nextState, response } = await handleMessage(buyMsg({ solSpent: 1, priceUsd: 0.002 }), state)
-    expect(response.ok).toBe(true)
-    expect(nextState.balanceSol).toBeCloseTo(0.05 - 1, 10)
-    expect(nextState.balanceSol).toBeLessThan(0)
+    expect(response.ok).toBe(false)
+    expect(nextState.balanceSol).toBe(0.05)
   })
 })
 
@@ -354,5 +358,58 @@ describe('balance messages', () => {
     )
     expect(response.ok).toBe(false)
     expect(nextState).toEqual(snapshot)
+  })
+})
+
+// A paper account that can spend SOL it does not have is not simulating risk — it is
+// simulating a cheat code. The whole point of the product is to make a bad trade cost
+// something, and an unbounded balance means the user can never actually blow up.
+//
+// This was a deliberate omission once: the balance was allowed to go negative "rather than
+// silently dropping a trade the user believes went through", and at the time that was the
+// honest trade-off, because a rejected buy only reached console.warn. The widget now shows
+// the rejection, so the reason for allowing it is gone.
+describe('handleMessage BUY balance floor', () => {
+  it('refuses a buy larger than the balance and leaves the account untouched', async () => {
+    const state = freshState({ balanceSol: 0.3, solUsdPrice: SOL_USD })
+    const { nextState, response } = await handleMessage(buyMsg({ solSpent: 0.5, priceUsd: 0.002 }), state)
+
+    expect(response.ok).toBe(false)
+    expect(response.error).toMatch(/0\.3000 SOL/) // says what is actually available
+    expect(nextState).toEqual(state) // no position, no history entry, no balance change
+  })
+
+  // The fee is part of the cost. A buy that fits only by ignoring it would still overdraw.
+  it('counts the priority fee against the balance', async () => {
+    const state = freshState({ balanceSol: 0.5, solUsdPrice: SOL_USD })
+    const { nextState, response } = await handleMessage(
+      buyMsg({ solSpent: 0.5, priceUsd: 0.002, priorityFeeSol: 0.01 }),
+      state,
+    )
+
+    expect(response.ok).toBe(false)
+    expect(nextState).toEqual(state)
+  })
+
+  // An empty account is not a shortfall, it is an un-funded one, and the fix is somewhere
+  // else entirely. "You have 0.0000 SOL" states the problem; it does not tell a first-run
+  // user that the starting balance lives in the side panel.
+  it('tells a first-run user where to fund the account instead of quoting a zero balance', async () => {
+    const state = freshState({ balanceSol: 0, solUsdPrice: SOL_USD })
+    const { response } = await handleMessage(buyMsg({ solSpent: 0.25, priceUsd: 0.002 }), state)
+
+    expect(response.ok).toBe(false)
+    expect(response.error).toMatch(/side panel/i)
+    expect(response.error).not.toMatch(/0\.0000 SOL/)
+  })
+
+  // Spending the balance exactly to the last lamport is a legitimate all-in, not an
+  // overdraw, and floating-point noise must not turn it into one.
+  it('allows a buy that spends the balance exactly', async () => {
+    const state = freshState({ balanceSol: 0.5, solUsdPrice: SOL_USD })
+    const { nextState, response } = await handleMessage(buyMsg({ solSpent: 0.5, priceUsd: 0.002 }), state)
+
+    expect(response.ok).toBe(true)
+    expect(nextState.balanceSol).toBeCloseTo(0, 12)
   })
 })

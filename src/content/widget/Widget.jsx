@@ -6,7 +6,15 @@
 import { useState } from 'preact/hooks'
 import { TokenIcon } from '../../ui/TokenIcon.jsx'
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
-import { formatPrice, formatSol, formatPercent, formatTokenAmount, formatMarketCap } from '../../ui/format.js'
+import {
+  formatPrice,
+  formatSol,
+  formatPercent,
+  formatTokenAmount,
+  formatMarketCap,
+  formatUsd,
+  pnlClass,
+} from '../../ui/format.js'
 import './Widget.css'
 
 const BUY_PRESETS_SOL = [0.1, 0.25, 0.5, 1, 2, 5]
@@ -23,6 +31,7 @@ export function Widget({
   balanceSol = 0,
   solUsdPrice = 0,
   marketCapUsd = null,
+  error = null,
   onBuyPreset,
   onSellPreset,
 }) {
@@ -41,6 +50,7 @@ export function Widget({
   // PnL comes from the shared engine, so the widget can never disagree with the Side
   // Panel. `pnlSol` is measured against what was actually paid, not reconstructed.
   const pnl = position ? getUnrealizedPnl(position, solUsdPrice) : null
+  const pnlUsdText = pnl ? formatUsd(pnl.pnlUsd, { signed: true }) : ''
 
   // Identity: prefer what the background resolved for the position, fall back to
   // whatever the page told us about the token currently being viewed.
@@ -77,6 +87,16 @@ export function Widget({
 
       {!collapsed && (
         <>
+          {/* A rejected trade has to say so. The only report used to be console.warn: the
+              user clicked buy, the panel did not change, and the extension read as broken.
+              This is also what lets the account keep a hard balance floor — refusing an
+              unaffordable buy is honest feedback here, and was indistinguishable from a
+              dead button before. */}
+          {error && (
+            <p class="axpt-widget-error" role="alert">
+              {error}
+            </p>
+          )}
           {/* Detection missing the token must never mean "no way to trade". Every other
               path here depends on `mint`, so when it is absent the user gets a way to
               supply it by hand rather than a panel of dead buttons and no explanation. */}
@@ -114,9 +134,16 @@ export function Widget({
               <span class="axpt-muted">Avg</span>
               <span>{formatPrice(position.avgEntryUsd)}</span>
               <span class="axpt-muted">PnL</span>
-              <span class={pnl.pnlPct >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}>
-                {pnl.pnlSol === null ? formatPercent(pnl.pnlPct) : `${formatSol(pnl.pnlSol, { signed: true })} SOL`}
-                {pnl.pnlSol === null ? '' : ` (${formatPercent(pnl.pnlPct)})`}
+              {/* Three units, because each answers a different question: SOL is what the
+                  paper account is denominated in, USD is how a trader actually sizes a win,
+                  and the percentage is how it compares to every other trade. USD needs no
+                  SOL/USD rate — it falls out of the token price — so it always renders.
+                  Colour comes from the formatted USD figure, the same rule the Side Panel
+                  uses, so the two surfaces cannot disagree about the same position. */}
+              <span class={pnlClass(pnlUsdText)}>
+                {pnl.pnlSol === null ? '' : `${formatSol(pnl.pnlSol, { signed: true })} SOL · `}
+                {pnlUsdText}
+                {` (${formatPercent(pnl.pnlPct)})`}
               </span>
             </div>
           )}

@@ -28,7 +28,15 @@ const POSITION = {
 }
 
 // A losing position, to exercise the other side of every sign-dependent branch.
-//   value  = 500,000 * 0.00008 = $40 = 0.2 SOL against 0.5 SOL invested → -0.3 SOL
+//
+// Cost basis has to agree with itself: 500,000 tokens at $0.0001 is $50 spent, which at
+// $200/SOL is 0.25 SOL — not the 0.5 this fixture used to claim. applyBuy derives both
+// numbers from one trade, so no real position can disagree with itself this way. The
+// contradiction stayed invisible while only the SOL figure was displayed, and surfaced the
+// moment USD was rendered beside it: the same position was down $10 by price basis and $60
+// by SOL basis. A fixture that cannot exist is a test that proves nothing.
+//   value  = 500,000 * 0.00008 = $40 = 0.2 SOL against 0.25 SOL invested → -0.05 SOL
+//   pnlUsd = -0.00002 * 500,000 = -$10
 //   pnlPct = -0.00002 / 0.0001 * 100 = -20.00%
 const LOSING_POSITION = {
   name: 'Dumpo',
@@ -36,7 +44,7 @@ const LOSING_POSITION = {
   imageUrl: 'https://x/dump.png',
   qty: 500_000,
   avgEntryUsd: 0.0001,
-  solInvested: 0.5,
+  solInvested: 0.25,
   lastPriceUsd: 0.00008,
 }
 
@@ -185,13 +193,16 @@ describe('Widget position summary', () => {
     expect(container.querySelectorAll('.axpt-widget-position')).toHaveLength(1)
   })
 
-  it('renders unrealized PnL in SOL as well as %, in the gain colour', () => {
+  it('renders unrealized PnL in SOL, USD and %, in the gain colour', () => {
     render(
       <Widget position={POSITION} mint={MINT} solUsdPrice={SOL_USD} onBuyPreset={noop} onSellPreset={noop} />,
     )
-    // 1e6 tokens * $0.00005 = $50 = 0.25 SOL, against 0.2 SOL invested → +0.05 SOL.
+    // 1e6 tokens * $0.00005 = $50 = 0.25 SOL, against 0.2 SOL invested → +0.05 SOL = +$10.
+    // All three units together: SOL is what the paper account is denominated in, but "am I
+    // up ten dollars or ten thousand" is the question a trader actually asks, and a
+    // percentage alone answers it only if you remember the position size.
     const pnl = screen.getByText(/\+0\.0500 SOL/)
-    expect(pnl).toHaveTextContent('+0.0500 SOL (+25.00%)')
+    expect(pnl).toHaveTextContent('+0.0500 SOL · +$10.00 (+25.00%)')
     expect(pnl).toHaveClass('axpt-pnl-positive')
     expect(pnl).not.toHaveClass('axpt-pnl-negative')
   })
@@ -206,19 +217,21 @@ describe('Widget position summary', () => {
         onSellPreset={noop}
       />,
     )
-    // 5e5 tokens * $0.00008 = $40 = 0.2 SOL, against 0.5 SOL invested → -0.3 SOL.
-    const pnl = screen.getByText(/-0\.3000 SOL/)
-    expect(pnl).toHaveTextContent('-0.3000 SOL (-20.00%)')
+    // 5e5 tokens * $0.00008 = $40 = 0.2 SOL, against 0.25 SOL invested → -0.05 SOL = -$10.
+    // The minus sits outside the dollar sign: "-$10.00", never "$-10.00".
+    const pnl = screen.getByText(/-0\.0500 SOL/)
+    expect(pnl).toHaveTextContent('-0.0500 SOL · -$10.00 (-20.00%)')
     expect(pnl).toHaveClass('axpt-pnl-negative')
     expect(pnl).not.toHaveClass('axpt-pnl-positive')
   })
 
-  it('falls back to percent alone when the SOL/USD rate is unknown', () => {
+  it('drops only the SOL figure when the SOL/USD rate is unknown', () => {
     render(<Widget position={POSITION} mint={MINT} onBuyPreset={noop} onSellPreset={noop} />)
-    // Without a rate the engine returns pnlSol === null, and inventing a SOL figure
-    // would be a lie — so the percent stands alone rather than reading "0.0000 SOL".
-    const pnl = screen.getByText('+25.00%')
-    expect(pnl).toBeInTheDocument()
+    // Without a rate the engine returns pnlSol === null, and inventing a SOL figure would
+    // be a lie. USD needs no rate, though — it comes straight from the token price — so
+    // the dollar figure survives where the SOL one cannot.
+    const pnl = screen.getByText(/\+\$10\.00/)
+    expect(pnl).toHaveTextContent('+$10.00 (+25.00%)')
     expect(pnl).not.toHaveTextContent('SOL')
     expect(pnl).toHaveClass('axpt-pnl-positive')
   })
@@ -486,5 +499,35 @@ describe('Widget — manual token entry when detection misses', () => {
     buy.click()
 
     expect(onBuyPreset).toHaveBeenCalledWith(0.25)
+  })
+})
+
+// A rejected trade has to be VISIBLE.
+//
+// Until now the only report of a failure was console.warn: the user clicked buy, nothing
+// happened, and the extension looked broken. That silence is also what justified letting
+// the balance go negative rather than refusing an unaffordable buy — refusing it would
+// have been indistinguishable from the button not working. With the rejection on screen,
+// the account can hold its floor and still explain itself.
+describe('Widget trade errors', () => {
+  it('shows a rejected trade instead of leaving the user staring at an unchanged panel', () => {
+    render(
+      <Widget
+        position={null}
+        mint={MINT}
+        solUsdPrice={SOL_USD}
+        error="Not enough paper SOL — that costs 1.0000 SOL and you have 0.0500 SOL"
+        onBuyPreset={noop}
+        onSellPreset={noop}
+      />,
+    )
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Not enough paper SOL')
+    expect(alert).toHaveTextContent('0.0500 SOL')
+  })
+
+  it('shows no alert when nothing has gone wrong', () => {
+    render(<Widget position={null} mint={MINT} solUsdPrice={SOL_USD} onBuyPreset={noop} onSellPreset={noop} />)
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

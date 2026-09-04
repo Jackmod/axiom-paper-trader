@@ -5,7 +5,7 @@ import { Analytics } from './tabs/Analytics.jsx'
 import { Settings } from './tabs/Settings.jsx'
 import { Onboarding } from './components/Onboarding.jsx'
 import { getPortfolioStats } from '../lib/portfolio-stats.js'
-import { formatSol, formatPercent, formatUsd } from '../ui/format.js'
+import { formatSol, formatPercent, formatUsd, pnlClass } from '../ui/format.js'
 import './SidePanel.css'
 import '../ui/tokens.css'
 import '../ui/motion.css'
@@ -75,6 +75,11 @@ export function SidePanel() {
   }
 
   const { balanceSol, positionValueSol, unrealizedPnlSol, totalPnlUsd, winRate } = getPortfolioStats(state)
+  // Formatted once, then used for both the text and its colour — see pnlClass.
+  const totalPnlText =
+    unrealizedPnlSol === null
+      ? formatUsd(totalPnlUsd, { signed: true })
+      : `${formatSol(unrealizedPnlSol, { signed: true })} SOL`
 
   return (
     <div class="axpt-panel panel-enter">
@@ -91,9 +96,10 @@ export function SidePanel() {
         </div>
         <div class="axpt-stat">
           <span class="axpt-stat-label">Total PnL</span>
-          <span class={`mono axpt-stat-value ${(unrealizedPnlSol ?? totalPnlUsd) >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-            {unrealizedPnlSol === null ? formatUsd(totalPnlUsd, { signed: true }) : `${formatSol(unrealizedPnlSol, { signed: true })} SOL`}
-          </span>
+          {/* One rule for the colour, shared with every other PnL figure: it follows the
+              text. A flat portfolio printed "0.000000 SOL" in pink here, because the raw
+              total was a hair below zero. */}
+          <span class={`mono axpt-stat-value ${pnlClass(totalPnlText)}`}>{totalPnlText}</span>
         </div>
         <div class="axpt-stat">
           <span class="axpt-stat-label">Win rate</span>

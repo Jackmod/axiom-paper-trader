@@ -33,26 +33,62 @@ export function formatTokenAmount(value) {
 /** SOL amounts — always signed for PnL, so a gain reads unambiguously as a gain. */
 export function formatSol(value, { signed = false } = {}) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
-  const sign = signed && value > 0 ? '+' : ''
   const abs = Math.abs(value)
   const decimals = abs >= 1 ? 3 : abs >= 0.001 ? 4 : 6
-  return `${sign}${value.toFixed(decimals)}`
+  const digits = abs.toFixed(decimals)
+
+  // Take the sign from the ROUNDED figure, not the raw one. A position opened at the
+  // current price is flat to six decimals but carries a hair of quote-rounding dust, and
+  // signing that produced "-0.000000 SOL" — a loss of nothing, painted red.
+  const sign = Number(digits) === 0 ? '' : value < 0 ? '-' : signed ? '+' : ''
+  return `${sign}${digits}`
 }
 
 export function formatPercent(value) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(2)}%`
+  // Sign from the ROUNDED figure, as in formatSol and formatUsd: a position at its entry
+  // price is flat to two decimals, and signing the dust beneath produced "-0.00%".
+  const digits = Math.abs(value).toFixed(2)
+  const sign = Number(digits) === 0 ? '' : value < 0 ? '-' : '+'
+  return `${sign}${digits}%`
 }
 
 /** USD totals for the portfolio header. */
 export function formatUsd(value, { signed = false } = {}) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
-  // The sign belongs OUTSIDE the currency symbol. Taking the sign from the number itself
-  // rendered losses as "$-4.00", which reads as a malformed price rather than a loss.
-  const sign = value < 0 ? '-' : signed && value > 0 ? '+' : ''
   const abs = Math.abs(value)
-  return `${sign}$${abs >= 1 ? abs.toFixed(2) : abs.toPrecision(3)}`
+
+  // A floor, below which there is no money here to report. A position opened at the
+  // current price carries a few millionths of a dollar of quote-rounding dust, and three
+  // significant digits turned that into "-$0.00000502" — noise, wearing a minus sign, in
+  // the one place the user looks to see whether they are up. A hundredth of a cent is not
+  // an amount anyone trades; above it, significance still matters, because a tiny position
+  // can be a 50% winner that "$0.00" would report as having done nothing.
+  if (abs < 0.0001) return '$0.00'
+
+  // Cents for ordinary money — 7 cents is "$0.07", not "$0.0700" — significant digits only
+  // below a cent, where fixed decimals would erase the figure entirely.
+  const digits = abs >= 0.01 ? abs.toFixed(2) : abs.toPrecision(3)
+
+  // The sign belongs OUTSIDE the currency symbol — "$-4.00" reads as a malformed price
+  // rather than a loss — and it comes from the ROUNDED figure, so dust below a cent is
+  // never signed into a phantom loss.
+  const sign = Number(digits) === 0 ? '' : value < 0 ? '-' : signed ? '+' : ''
+  return `${sign}$${digits}`
+}
+
+/**
+ * The CSS class a PnL figure should wear, taken from the text that will be shown.
+ *
+ * Four surfaces render PnL — the on-page widget, the popup, the Side Panel header and each
+ * position row — and each used to decide its colour from the raw float. Entry prices come
+ * back from swap quotes, so a position opened seconds ago sits a few millionths of a dollar
+ * under water: every surface printed "$0.00", and they disagreed about whether that was
+ * green or pink, for the same position at the same instant. Deriving the colour from the
+ * rendered string is the only version of this rule that cannot drift out of sync with it.
+ */
+export function pnlClass(text) {
+  return String(text).trim().startsWith('-') ? 'axpt-pnl-negative' : 'axpt-pnl-positive'
 }
 
 /**

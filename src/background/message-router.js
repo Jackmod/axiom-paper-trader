@@ -12,6 +12,25 @@ export async function handleMessage(message, state) {
     try {
       if (!(solUsdPrice > 0)) throw new Error('No SOL/USD rate available yet — try again in a moment')
 
+      // The balance is a floor, because risk you cannot run out of is not risk. The whole
+      // product is practice at losing real money safely, and an account that can always
+      // afford one more trade teaches the opposite lesson.
+      //
+      // The fee counts: a buy that only fits by ignoring it still overdraws. The epsilon is
+      // one lamport, so spending the balance to the last decimal is an all-in rather than
+      // an overdraw when floating-point noise lands a hair on the wrong side.
+      const cost = solSpent + priorityFeeSol
+      if (cost > state.balanceSol + 1e-9) {
+        // An empty account is a different problem from a shortfall, and it has a different
+        // fix. The balance starts at zero until the user sets one, so "you have 0.0000 SOL"
+        // would state the obstacle to a first-run user without telling them where to clear it.
+        throw new Error(
+          state.balanceSol > 0
+            ? `Not enough paper SOL — that costs ${cost.toFixed(4)} SOL and you have ${state.balanceSol.toFixed(4)} SOL`
+            : 'Your paper account is empty — open the side panel to set a starting balance',
+        )
+      }
+
       const positions = applyBuy(state.positions, { mint, symbol, name, imageUrl, solSpent, priceUsd, solUsdPrice })
       const tokensBought = positions[mint].qty - (state.positions[mint]?.qty ?? 0)
 
@@ -31,8 +50,6 @@ export async function handleMessage(message, state) {
           timestamp: Date.now(),
         },
       ]
-      // Paper trading has no hard balance floor: the balance may go negative rather than
-      // silently dropping a trade the user believes went through.
       const nextState = { ...state, positions, tradeHistory, balanceSol: state.balanceSol - solSpent - priorityFeeSol }
       return { nextState, response: { ok: true, tokensBought } }
     } catch (e) {

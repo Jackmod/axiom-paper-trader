@@ -104,10 +104,13 @@ describe('Positions', () => {
       />,
     )
     expect(screen.getByText('0.3750 SOL')).toBeInTheDocument()
-    expect(screen.getByText('+0.1250 SOL (+50.00%)')).toBeInTheDocument()
-    // The USD figures are the fallback, not an extra column.
+    // PnL carries all three units, same as the on-page widget. USD used to appear only as a
+    // fallback when the SOL rate was missing, which meant the one number a trader reaches
+    // for — "am I up ten dollars or ten thousand" — was the only one never shown.
+    expect(screen.getByText('+0.1250 SOL · +$25.00 (+50.00%)')).toBeInTheDocument()
+    // Value stays SOL-only: the account is denominated in SOL, and repeating every figure
+    // in two currencies turns a scannable row into a wall of numbers.
     expect(screen.queryByText('$75.00')).toBeNull()
-    expect(screen.queryByText(/\+\$25\.00/)).toBeNull()
   })
 
   // The other branch: with no rate (fresh install, or the SOL/USD fetch failed) the row
@@ -172,8 +175,9 @@ describe('Positions', () => {
         solUsdPrice={200}
       />,
     )
-    const win = screen.getByText('+0.2500 SOL (+50.00%)')
-    const lose = screen.getByText('-0.2500 SOL (-50.00%)')
+    const win = screen.getByText('+0.2500 SOL · +$50.00 (+50.00%)')
+    // The minus sits outside the currency symbol — "-$50.00", never "$-50.00".
+    const lose = screen.getByText('-0.2500 SOL · -$50.00 (-50.00%)')
     expect(win).toHaveClass('axpt-pnl-positive')
     expect(win).not.toHaveClass('axpt-pnl-negative')
     expect(lose).toHaveClass('axpt-pnl-negative')
@@ -239,10 +243,40 @@ describe('Positions', () => {
         solUsdPrice={200}
       />,
     )
-    const flat = screen.getByText('0.000000 SOL (0.00%)')
+    // Flat takes no sign at all, on either unit: "+$0.00" claims a gain that did not happen.
+    const flat = screen.getByText('0.000000 SOL · $0.00 (0.00%)')
     expect(flat).toHaveClass('axpt-pnl-positive')
     expect(flat).not.toHaveClass('axpt-pnl-negative')
     expect(flat.textContent.trim().startsWith('-')).toBe(false)
+  })
+
+  // The colour has to follow the DISPLAYED figure, not the raw one.
+  //
+  // A real position is never exactly flat: the entry price comes back from a swap quote,
+  // so a position opened seconds ago sits a few millionths of a dollar under water. That
+  // read "$0.00" — correctly — while being painted pink, so the panel showed a loss and
+  // the on-page widget showed a gain for the same position at the same instant.
+  it('paints a position whose loss rounds away as flat, not as a loss', () => {
+    render(
+      <Positions
+        positions={{
+          DUST: {
+            name: 'Dust',
+            symbol: 'DUST',
+            imageUrl: '',
+            qty: 1000,
+            avgEntryUsd: 0.05000000002,
+            solInvested: 0.25,
+            lastPriceUsd: 0.05,
+            stale: false,
+          },
+        }}
+        solUsdPrice={200}
+      />,
+    )
+    const flat = screen.getByText(/\$0\.00/)
+    expect(flat).toHaveClass('axpt-pnl-positive')
+    expect(flat).not.toHaveClass('axpt-pnl-negative')
   })
 
   it('shows a stale indicator only on positions whose price refresh failed', () => {
@@ -302,7 +336,7 @@ describe('Positions', () => {
     )
     expect(screen.getByText('1.100 SOL')).toBeInTheDocument()
     expect(screen.getByText('200.00 STALE @ $1.00')).toBeInTheDocument()
-    expect(screen.getByText(/\+0\.1000 SOL \(\+10\.00%\)/)).toBeInTheDocument()
+    expect(screen.getByText(/\+0\.1000 SOL · \+\$20\.00 \(\+10\.00%\)/)).toBeInTheDocument()
   })
 })
 

@@ -82,6 +82,19 @@ async function launch() {
 
 const widget = (page) => page.locator('#axiom-paper-trader-root')
 
+/**
+ * Give the paper account a starting balance, the way onboarding does.
+ *
+ * The account starts empty and the balance is a hard floor, so a buy on a fresh profile is
+ * correctly refused — any test that trades has to fund first. Written through the service
+ * worker because that is where chrome.storage is reachable, and it is the same storage the
+ * content script subscribes to.
+ */
+async function fundAccount(context, sol) {
+  const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'))
+  await worker.evaluate((amount) => chrome.storage.local.set({ balanceSol: amount }), sol)
+}
+
 test('the widget actually renders on a token page', async () => {
   const { context, page } = await launch()
 
@@ -134,6 +147,7 @@ test('clicking an amount preset does NOT record a trade', async () => {
 
 test('buying through Axiom’s submit button records a position and never triggers a real trade', async () => {
   const { context, page } = await launch()
+  await fundAccount(context, 10)
   await page.goto(TOKEN_URL)
   await expect(widget(page)).toBeVisible({ timeout: 15000 })
 
@@ -157,6 +171,18 @@ test('buying through Axiom’s submit button records a position and never trigge
   const pnlPct = Number(/\(([-+]?[\d.]+)%\)/.exec(pnlText)?.[1])
   expect(Number.isFinite(pnlPct)).toBe(true)
   expect(Math.abs(pnlPct)).toBeLessThan(5)
+
+  // PnL answers "how much am I up" in all three units the user thinks in. Scoped to the
+  // PnL line specifically — the header's token price is legitimately "$0.000004521", so a
+  // whole-widget search for long decimals flags precision that is supposed to be there.
+  const pnlLine = pnlText.split('\n').find((line) => line.includes('SOL · ')) ?? pnlText
+  expect(pnlLine).toMatch(/^[-+]?[\d.]+ SOL · [-+]?\$[\d.]+ \([-+]?[\d.]+%\)$/)
+
+  // And a position opened at the current price reads as flat, not as a tiny loss. Its true
+  // PnL is a few millionths of a dollar of quote-rounding dust; signing that produced
+  // "-0.000000 SOL · -$0.00000502", which is both noise and the wrong colour.
+  expect(pnlLine).not.toMatch(/^-0\.000000 SOL/)
+  expect(pnlLine).not.toMatch(/\$0\.0000\d/)
 
   await context.close()
 })
@@ -200,6 +226,7 @@ test('on a discovery feed it does NOT latch onto a coin from the list', async ()
 
 test('a position can be closed from the side panel, with no Axiom page in sight', async () => {
   const { context, page } = await launch()
+  await fundAccount(context, 10)
   await page.goto(TOKEN_URL)
   await expect(widget(page)).toBeVisible({ timeout: 15000 })
 
@@ -262,6 +289,27 @@ test('detection survives the price refresh cycle', async () => {
   await expect(widget(page)).not.toContainText(/No token open/i)
   await expect(page.getByRole('button', { name: 'Buy 0.25 SOL' })).toBeEnabled()
   await page.screenshot({ path: join(SHOTS, '08-detection-persists.png') })
+
+  await context.close()
+})
+
+test('a buy larger than the paper balance is refused, visibly, and never opens a position', async () => {
+  const { context, page } = await launch()
+  await fundAccount(context, 0.05)
+  await page.goto(TOKEN_URL)
+  await expect(widget(page)).toBeVisible({ timeout: 15000 })
+
+  // Risk you cannot run out of is not risk. The account used to let a buy drive the balance
+  // negative, on the reasoning that refusing it would look like a broken button — which was
+  // true while a rejection only reached console.warn.
+  await page.fill('#amount', '1')
+  await page.locator('button.submit', { hasText: 'Buy DESI' }).click()
+
+  const alert = widget(page).getByRole('alert')
+  await expect(alert).toContainText(/Not enough paper SOL/i, { timeout: 15000 })
+  await expect(alert).toContainText('0.0500 SOL')
+  await expect(widget(page)).not.toContainText('Holding')
+  await page.screenshot({ path: join(SHOTS, '09-insufficient-balance.png') })
 
   await context.close()
 })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { getUnrealizedPnl } from '../lib/position-engine.js'
-import { formatSol, formatTokenAmount, formatUsd } from '../ui/format.js'
+import { formatSol, formatTokenAmount, formatUsd, pnlClass } from '../ui/format.js'
 import { TokenIcon } from '../ui/TokenIcon.jsx'
 import './Popup.css'
 import '../ui/tokens.css'
@@ -42,15 +42,17 @@ export function Popup() {
   // SOL when a rate is known, USD otherwise — never a number in an unstated currency.
   const totalPnlSol = solUsdPrice > 0 ? positions.reduce((sum, [, p]) => sum + (getUnrealizedPnl(p, solUsdPrice).pnlSol ?? 0), 0) : null
   const totalPnlUsd = positions.reduce((sum, [, p]) => sum + getUnrealizedPnl(p).pnlUsd, 0)
-  const totalPnl = totalPnlSol ?? totalPnlUsd
+  // Formatted once, then used for both the text and its colour — see pnlClass.
+  const totalPnlText =
+    totalPnlSol === null
+      ? formatUsd(totalPnlUsd, { signed: true })
+      : `${formatSol(totalPnlSol, { signed: true })} SOL`
 
   return (
     <div class="axpt-popup panel-enter">
       <div class="axpt-popup-header">
         <span class="mono">{formatSol(state.balanceSol ?? 0)} SOL</span>
-        <span class={`mono ${totalPnl >= 0 ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-          {totalPnlSol === null ? formatUsd(totalPnlUsd, { signed: true }) : `${formatSol(totalPnlSol, { signed: true })} SOL`} PnL
-        </span>
+        <span class={`mono ${pnlClass(totalPnlText)}`}>{totalPnlText} PnL</span>
       </div>
       <ul class="axpt-popup-positions">
         {positions.slice(0, 4).map(([mint, p]) => (

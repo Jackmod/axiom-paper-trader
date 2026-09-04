@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { getUnrealizedPnl } from '../../lib/position-engine.js'
 import { TokenIcon } from '../../ui/TokenIcon.jsx'
-import { formatPrice, formatSol, formatPercent, formatTokenAmount, formatUsd } from '../../ui/format.js'
+import { formatPrice, formatSol, formatPercent, formatTokenAmount, formatUsd, pnlClass } from '../../ui/format.js'
 
 const SELL_PRESETS_PCT = [25, 50, 100]
 
@@ -42,7 +42,9 @@ export function Positions({ positions, solUsdPrice = 0 }) {
       <ul class="axpt-position-list">
         {entries.map(([mint, p]) => {
           const { pnlUsd, pnlPct, pnlSol, valueSol, valueUsd } = getUnrealizedPnl(p, solUsdPrice)
-          const up = pnlUsd >= 0
+
+          // Formatted once, then used for both the text and its colour — see pnlClass.
+          const pnlText = formatUsd(pnlUsd, { signed: true })
 
           return (
             <li key={mint} class="axpt-position-row">
@@ -62,9 +64,12 @@ export function Positions({ positions, solUsdPrice = 0 }) {
                   <div class="mono axpt-position-value">
                     {valueSol === null ? formatUsd(valueUsd) : `${formatSol(valueSol)} SOL`}
                   </div>
-                  <div class={`mono ${up ? 'axpt-pnl-positive' : 'axpt-pnl-negative'}`}>
-                    {pnlSol === null ? formatUsd(pnlUsd, { signed: true }) : `${formatSol(pnlSol, { signed: true })} SOL`}{' '}
-                    ({formatPercent(pnlPct)})
+                  <div class={`mono ${pnlClass(pnlText)}`}>
+                    {/* SOL · USD · % — the same trio the on-page widget shows, so the two
+                        surfaces can never appear to disagree about the same position. USD
+                        needs no SOL/USD rate, so it is the figure that always renders. */}
+                    {pnlSol === null ? '' : `${formatSol(pnlSol, { signed: true })} SOL · `}
+                    {pnlText} ({formatPercent(pnlPct)})
                     {p.stale && <span class="axpt-stale-dot" title="Price may be stale" />}
                   </div>
                 </div>

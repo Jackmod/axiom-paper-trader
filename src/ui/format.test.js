@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { formatPrice, formatTokenAmount, formatSol, formatPercent, formatUsd, formatMarketCap } from './format.js'
+import {
+  formatPrice,
+  formatTokenAmount,
+  formatSol,
+  formatPercent,
+  formatUsd,
+  formatMarketCap,
+  pnlClass,
+} from './format.js'
 
 describe('formatPrice', () => {
   it('keeps a sub-cent memecoin price legible instead of rounding it to zero', () => {
@@ -62,12 +70,28 @@ describe('formatSol', () => {
     expect(formatSol(-0.5, { signed: true })).toBe('-0.5000')
   })
 
+  // Same negative-zero trap as formatUsd: a position opened at the current price is flat
+  // to six decimals, and the sign of the underlying dust rendered it as "-0.000000 SOL",
+  // which reads as a loss and colours the whole PnL row red for no reason.
+  it('never signs an amount that rounds to zero', () => {
+    expect(formatSol(-0.0000000052, { signed: true })).toBe('0.000000')
+    expect(formatSol(0, { signed: true })).toBe('0.000000')
+  })
+
   it('handles missing values', () => {
     expect(formatSol(undefined)).toBe('—')
   })
 })
 
 describe('formatPercent', () => {
+  // Completes the negative-zero family (see formatSol and formatUsd): a position sitting
+  // at its entry price is flat to two decimals, and taking the sign from the raw value
+  // rendered "-0.00%" — a loss of nothing, three times over on the same line.
+  it('never signs a percentage that rounds to zero', () => {
+    expect(formatPercent(-0.0000001)).toBe('0.00%')
+    expect(formatPercent(0)).toBe('0.00%')
+  })
+
   it('always signs, so a gain never reads as a loss', () => {
     expect(formatPercent(12.3456)).toBe('+12.35%')
     expect(formatPercent(-95.6)).toBe('-95.60%')
@@ -87,8 +111,40 @@ describe('formatUsd', () => {
     expect(formatUsd(-4)).toBe('-$4.00')
   })
 
-  it('keeps small USD values from rounding away', () => {
-    expect(formatUsd(0.0042)).toContain('42')
+  // Cents down to a cent; significant digits below one.
+  //
+  // Everything above a cent is ordinary money and reads as money — 7 cents is "$0.07",
+  // not "$0.0700". Below a cent, significance has to survive, because a tiny position can
+  // still be a 50% winner and "$0.00" would report it as having done nothing.
+  it('shows cents for ordinary amounts and keeps significance below one', () => {
+    expect(formatUsd(12.345)).toBe('$12.35')
+    expect(formatUsd(0.07, { signed: true })).toBe('+$0.07')
+    expect(formatUsd(0.002)).toBe('$0.00200')
+  })
+
+  // ...but there is a floor. A hundredth of a cent is not an amount of money at any scale
+  // a person trades — it is quote-rounding dust on a position opened seconds ago — and it
+  // used to render as "-$0.00000502": eight characters of noise, carrying a minus sign,
+  // in the one place the user looks to see whether they are up.
+  it('treats dust below a hundredth of a cent as zero, unsigned', () => {
+    expect(formatUsd(-0.00000502, { signed: true })).toBe('$0.00')
+    expect(formatUsd(0, { signed: true })).toBe('$0.00')
+    expect(formatUsd(-0)).toBe('$0.00')
+  })
+})
+
+describe('pnlClass', () => {
+  // Colour is derived from the TEXT, never from the float behind it. Four surfaces show
+  // PnL (widget, popup, side-panel header, position rows) and each used to test the raw
+  // number itself, so a position a few millionths of a dollar under water read "$0.00" in
+  // green on one surface and "$0.00" in pink on another — at the same instant, for the
+  // same position. Taking the sign from the rendered string makes that impossible.
+  it('follows the rendered sign, so text and colour cannot disagree', () => {
+    expect(pnlClass(formatUsd(-0.00000502, { signed: true }))).toBe('axpt-pnl-positive')
+    expect(pnlClass(formatSol(-0.0000000052, { signed: true }))).toBe('axpt-pnl-positive')
+    expect(pnlClass('-$4.00')).toBe('axpt-pnl-negative')
+    expect(pnlClass('+0.2500 SOL')).toBe('axpt-pnl-positive')
+    expect(pnlClass('—')).toBe('axpt-pnl-positive')
   })
 })
 

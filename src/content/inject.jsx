@@ -62,6 +62,9 @@ function App() {
   // The confirmed token: candidates go to the background, which asks the price APIs
   // which one is real. Nothing is displayed or traded until the market recognises it.
   const [tokenInfo, setTokenInfo] = useState(null)
+  // The last trade rejection, shown in the widget. It used to go only to console.warn,
+  // where a failed buy was indistinguishable from a button that did nothing.
+  const [tradeError, setTradeError] = useState(null)
   const candidateKey = mintOverride ?? pageCandidates.join(',')
 
   // Only a market-confirmed address is ever treated as the token. Every previous rule
@@ -192,6 +195,7 @@ function App() {
       // callback exists so a rejected trade or a torn-down service worker is visible in
       // the page console instead of vanishing (chrome.runtime.lastError must be read).
       const error = chrome.runtime.lastError?.message ?? (response?.ok === false ? response.error : null)
+      setTradeError(error)
       if (error) console.warn('[axiom-paper-trader] trade not recorded:', error)
     })
   }, [])
@@ -249,6 +253,7 @@ function App() {
       balanceSol={account.balanceSol}
       solUsdPrice={account.solUsdPrice}
       marketCapUsd={tokenInfo?.marketCapUsd ?? null}
+      error={tradeError}
       onBuyPreset={handleBuyPreset}
       onSellPreset={handleSellPreset}
     />
