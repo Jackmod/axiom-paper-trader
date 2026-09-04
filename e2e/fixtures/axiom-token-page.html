@@ -69,37 +69,22 @@
          valid base58. Counting addresses to decide "is this a token page?" fails here. -->
     <table class="holders-table">
       <thead><tr><th>Wallet</th><th>SOL</th></tr></thead>
+      <!-- Valid base58 (no 0, O, I or l): an earlier fixture used "W00…", which is not a
+           possible Solana address, so the guard this table exists to test was never
+           actually exercised. -->
       <tbody>
-        <tr><td>W00C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W01C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W02C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W03C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W04C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W05C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W06C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W07C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W08C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W09C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W10C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W11C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W12C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W13C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W14C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W15C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W16C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W17C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W18C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W19C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W20C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W21C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W22C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W23C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W24C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W25C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W26C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W27C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W28C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
-        <tr><td>W29C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
+        <tr><td>WabC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>29.3</td></tr>
+        <tr><td>WacC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>18.4</td></tr>
+        <tr><td>WadC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>12.9</td></tr>
+        <tr><td>WaeC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>11.2</td></tr>
+        <tr><td>WafC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>9.7</td></tr>
+        <tr><td>WagC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>8.1</td></tr>
+        <tr><td>WahC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>7.6</td></tr>
+        <tr><td>WajC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>6.3</td></tr>
+        <tr><td>WakC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>5.5</td></tr>
+        <tr><td>WamC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>4.8</td></tr>
+        <tr><td>WanC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>4.1</td></tr>
+        <tr><td>WapC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3</td><td>3.9</td></tr>
       </tbody>
     </table>
 

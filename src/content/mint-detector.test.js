@@ -4,6 +4,8 @@ import { findMintCandidates, detectMint, isPlausibleMint } from './mint-detector
 const MINT = '31A8xLh6fwYavYvzdKeSsMjPGmK7RVz3Z4M5EG8Spump'
 const OTHER = 'DukWuNTcribb9pRez5PxafjWcZqWN3DjLHSd4qRGBRCx'
 const SOL = 'So11111111111111111111111111111111111111112'
+// Valid base58 wallet addresses: no 0, O, I or l.
+const wallet = (i) => 'Wa' + String.fromCharCode(98 + (i % 20)) + 'C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3'
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
 afterEach(() => {
@@ -191,10 +193,7 @@ describe('detectMint — a listing page is not a token page', () => {
 // token page lists holders, traders and wallets, all of them valid base58, so the guard
 // meant to suppress feeds also suppressed the pages it needed to work on.
 describe('detectMint — a busy token page is still a token page', () => {
-  const wallets = Array.from(
-    { length: 40 },
-    (_, i) => `W${String(i).padStart(2, '0')}C3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3`,
-  )
+  const wallets = Array.from({ length: 40 }, (_, i) => wallet(i))
   const holderTable = wallets.map((w) => `<tr><td>${w}</td></tr>`).join('')
 
   it('detects the routed token even with dozens of wallet addresses on the page', () => {

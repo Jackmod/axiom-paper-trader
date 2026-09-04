@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { findBuyButton, findSellButtons, scrapeTradeContext, readMint, canIntercept } from './dom-scraper.js'
+import { findBuyButton, findSellButtons, scrapeTradeContext, readMint, canIntercept, tradeCandidates } from './dom-scraper.js'
 
 // A realistic memecoin mint. It deliberately is NOT wrapped SOL or USDC: those are on
 // the detector denylist precisely because they litter a trading page and are never the
@@ -118,5 +118,42 @@ describe('readMint', () => {
   it('rejects a segment too short to be a mint', () => {
     setPath('/meme/abc')
     expect(readMint()).toBeNull()
+  })
+})
+
+// Structure gates, the market confirms. Both guards are required, and the failure modes
+// they cover are opposite: structure alone picked a wallet out of a holders table and
+// showed it as "Unnamed token"; API confirmation alone cannot tell a discovery feed from
+// a token page, because every coin listed on a feed IS a real tradeable token.
+describe('tradeCandidates', () => {
+  // Valid base58: no 0, O, I or l. An earlier fixture used 'W00…', which is not a
+  // possible address, so every test built on it passed without testing anything.
+  const WALLET = 'WabC3D4E5F6G7H8J9K1L2M3N4P5Q6R7S8T9U1V2W3'
+
+  it('offers nothing on a page that is not about a single token', () => {
+    // Nothing to confirm means nothing to trade — the widget asks for an address instead.
+    setPath('/pulse')
+    document.body.innerHTML = `<span>${MINT}</span><span>${WALLET}</span>`
+    expect(tradeCandidates()).toEqual([])
+  })
+
+  it('puts the routed token first so the market is asked about it before anything else', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = `<table><tr><td>${WALLET}</td></tr></table>`
+    expect(tradeCandidates()[0]).toBe(MINT)
+  })
+
+  it('still offers the other addresses as fallbacks, in case the first is not a token', () => {
+    // This is what rescues a route that carries a pool or pair address rather than a mint:
+    // the price API rejects it and the next candidate gets its turn.
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = `<table><tr><td>${WALLET}</td></tr></table>`
+    expect(tradeCandidates()).toContain(WALLET)
+  })
+
+  it('never repeats the detected token in its own fallback list', () => {
+    setPath(`/meme/${MINT}`)
+    document.body.innerHTML = `<span>${MINT}</span>`
+    expect(tradeCandidates().filter((m) => m === MINT)).toHaveLength(1)
   })
 })

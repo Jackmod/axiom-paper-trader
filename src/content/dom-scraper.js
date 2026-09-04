@@ -35,6 +35,28 @@ export const { percentOf, amountOf } = discovery
 export const readMint = () => detectMint(document, window.location.href)
 export const mintCandidates = () => findMintCandidates(document, window.location.href)
 
+/**
+ * Addresses worth asking the price APIs about, best first — or none at all.
+ *
+ * Two guards, and both are needed:
+ *
+ * - STRUCTURE decides whether this page is about ONE token. On a discovery feed every
+ *   listed coin is a real, tradeable token, so no amount of API confirmation can tell a
+ *   feed from a token page. Only the page's shape can.
+ * - The API then decides WHICH address is the token. Structure alone picked a wallet out
+ *   of a holders table and showed it as "Unnamed token"; a wallet is unknown to a price
+ *   API, so confirmation discards it and the next candidate gets its turn.
+ *
+ * Structure gates, the market confirms. Neither is sufficient alone.
+ */
+export function tradeCandidates() {
+  const detected = readMint()
+  if (!detected) return []
+
+  const ranked = mintCandidates().map((candidate) => candidate.mint)
+  return [detected, ...ranked.filter((mint) => mint !== detected)]
+}
+
 // Display-only details (spec §6). Every one of these is best-effort: if a heuristic
 // misses, the field is empty and the trade still records correctly. Token name, symbol
 // and image are backfilled from the price APIs by the background worker, so a miss here

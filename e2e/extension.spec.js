@@ -54,6 +54,7 @@ async function launch() {
       ids
         .split(',')
         .filter(Boolean)
+        .filter((id) => id === SOL_MINT || id === MINT)
         .map((id) => [id, { usdPrice: id === SOL_MINT ? 200 : 0.000004521, decimals: id === SOL_MINT ? 9 : 6 }]),
     )
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })

@@ -7,7 +7,7 @@ import { render } from 'preact'
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks'
 import { Widget } from './widget/Widget.jsx'
 import { attachTradeInterception, resolveFillPrice, resolveCurrentPrice } from './trade-interceptor.js'
-import { scrapeTradeContext } from './dom-scraper.js'
+import { scrapeTradeContext, tradeCandidates } from './dom-scraper.js'
 import { buildTradeMessage } from './trade-message.js'
 import { checkInterceptionHealth } from './selector-warning.js'
 import { watchRoute } from './route-watcher.js'
@@ -41,6 +41,7 @@ function App() {
   // Set when the user pastes an address because detection missed. Cleared on navigation,
   // so it can never silently follow them onto a different token.
   const [mintOverride, setMintOverride] = useState(null)
+  const [pageCandidates, setPageCandidates] = useState(() => tradeCandidates())
 
   useEffect(() => {
     chrome.storage.local.get(['balanceSol', 'solUsdPrice'], ({ balanceSol, solUsdPrice }) => {
@@ -58,25 +59,31 @@ function App() {
     return () => chrome.storage.onChanged.removeListener(onAccountChanged)
   }, [])
 
-  const mint = mintOverride ?? pageContext?.mint ?? null
-
-  // Name, symbol, image and price for whatever token is on screen — resolved as soon as
-  // the token is known, not only once it is held. The background does the fetching
-  // because a page-origin request is subject to the page's CORS.
+  // The confirmed token: candidates go to the background, which asks the price APIs
+  // which one is real. Nothing is displayed or traded until the market recognises it.
   const [tokenInfo, setTokenInfo] = useState(null)
+  const candidateKey = mintOverride ?? pageCandidates.join(',')
+
+  // Only a market-confirmed address is ever treated as the token. Every previous rule
+  // guessed from page structure and each guess had its own false positive — most
+  // recently a wallet from the holders table, shown as "Unnamed token".
+  const mint = tokenInfo?.mint ?? null
+
   useEffect(() => {
     setTokenInfo(null)
-    if (!mint) return undefined
+    const candidates = mintOverride ? [mintOverride] : pageCandidates
+    if (candidates.length === 0) return undefined
+
     let live = true
-    chrome.runtime.sendMessage({ type: 'TOKEN_INFO', payload: { mint } }, (response) => {
+    chrome.runtime.sendMessage({ type: 'RESOLVE_TOKEN', payload: { candidates } }, (response) => {
       // Reading lastError is required, otherwise a torn-down worker logs an unchecked error.
       if (chrome.runtime.lastError) return
-      if (live && response?.ok) setTokenInfo(response)
+      if (live && response?.ok && response.mint) setTokenInfo(response)
     })
     return () => {
       live = false
     }
-  }, [mint])
+  }, [candidateKey])
 
   // Keep the price live while the user is watching the chart.
   //
@@ -147,9 +154,10 @@ function App() {
     let attempts = 0
     const timer = setInterval(() => {
       attempts += 1
-      const scraped = scrapeTradeContext()
-      if (scraped) setPageContext(scraped)
-      if (scraped || attempts >= SCRAPE_RETRY_LIMIT) clearInterval(timer)
+      const found = tradeCandidates()
+      if (found.length) setPageCandidates(found)
+      setPageContext(scrapeTradeContext())
+      if (found.length || attempts >= SCRAPE_RETRY_LIMIT) clearInterval(timer)
     }, SCRAPE_RETRY_MS)
     return () => clearInterval(timer)
   }, [mint])
@@ -163,6 +171,7 @@ function App() {
       // Clearing first matters: if the new route's panel hasn't rendered yet, showing
       // the PREVIOUS token's position would invite a trade against the wrong coin.
       setPageContext(scrapeTradeContext())
+      setPageCandidates(tradeCandidates())
       setPosition(null)
       setMintOverride(null)
     })
@@ -233,7 +242,7 @@ function App() {
       tokenImageUrl={tokenInfo?.imageUrl ?? ''}
       // The API price is authoritative; the page's own number is the fallback for the
       // moment before it arrives.
-      priceUsd={tokenInfo?.priceUsd ?? pageContext?.priceUsd}
+      priceUsd={tokenInfo?.priceUsd ?? null}
       balanceSol={account.balanceSol}
       solUsdPrice={account.solUsdPrice}
       marketCapUsd={tokenInfo?.marketCapUsd ?? null}

@@ -2,7 +2,7 @@ import { handleMessage } from './message-router.js'
 import { getState, setState } from '../lib/storage.js'
 import { refreshAllPositions } from './refresh.js'
 import { resolvePrice } from '../lib/price-resolver.js'
-import { fetchJupiterPrice, SOL_MINT } from '../lib/price-sources/jupiter.js'
+import { fetchJupiterPrice, fetchJupiterTokenInfo, SOL_MINT } from '../lib/price-sources/jupiter.js'
 import { fetchTokenMetadata } from '../lib/token-metadata.js'
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -18,6 +18,38 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // the token currently on screen are resolved here, before any position exists. This
     // is what lets the widget name the coin the moment it opens rather than only after
     // a trade.
+    // Which of these addresses is actually the token?
+    //
+    // Every previous answer was a guess about page structure — the route, a copy button,
+    // an explorer link, how many addresses were present — and each guess had a new class
+    // of false positive, most recently a wallet from the holders table shown as "Unnamed
+    // token" priced at a number scraped off the page.
+    //
+    // The price APIs settle it definitively: a wallet address is unknown to them, a real
+    // mint comes back with a price. So the content script proposes candidates in priority
+    // order and the first one the market recognises wins. A candidate nothing recognises
+    // is not a token, however convincing its position on the page.
+    if (message.type === 'RESOLVE_TOKEN') {
+      const candidates = (message.payload.candidates ?? []).slice(0, 6)
+      for (const mint of candidates) {
+        const info = await fetchJupiterTokenInfo(mint)
+        if (!info?.priceUsd) continue
+        const metadata = await fetchTokenMetadata(mint)
+        sendResponse({
+          ok: true,
+          mint,
+          priceUsd: info.priceUsd,
+          name: metadata?.name ?? '',
+          symbol: metadata?.symbol ?? '',
+          imageUrl: metadata?.imageUrl ?? '',
+          marketCapUsd: metadata?.marketCapUsd ?? null,
+        })
+        return
+      }
+      sendResponse({ ok: true, mint: null })
+      return
+    }
+
     if (message.type === 'TOKEN_INFO') {
       const { mint } = message.payload
       const [metadata, price] = await Promise.all([fetchTokenMetadata(mint), resolvePrice(mint)])
